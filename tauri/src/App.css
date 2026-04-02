@@ -1,0 +1,5 @@
+/* App-specific styles if any, currently managed in index.css for a unified design */
+.auth-container {
+  /* Ensure the container is always visible */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
