@@ -78,6 +78,12 @@ lazy_static::lazy_static! {
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
     static ref CHILDREN : Children = Default::default();
+
+    // [Phase 25/26/43] Tauri Native Auth Bridge
+    pub static ref PENDING_CONNS: Arc<Mutex<HashMap<i32, mpsc::UnboundedSender<ipc::Data>>>> = Default::default();
+    pub static ref ON_INCOMING_CONN: Arc<Mutex<Option<Box<dyn Fn(i32, String, String) + Send + Sync>>>> = Default::default();
+    pub static ref ON_CANCEL_INCOMING_CONN: Arc<Mutex<Option<Box<dyn Fn(i32) + Send + Sync>>>> = Default::default();
+    pub static ref ON_AUTH_SUCCESS: Arc<Mutex<Option<Box<dyn Fn(i32) + Send + Sync>>>> = Default::default();
 }
 
 #[cfg(target_os = "windows")]

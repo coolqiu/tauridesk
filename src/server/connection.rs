@@ -571,7 +571,23 @@ impl Connection {
 
                 Some(data) = rx_from_cm.recv() => {
                     match data {
-                        ipc::Data::Authorize => {
+                        ipc::Data::Authorize {
+                            keyboard,
+                            clipboard,
+                            audio,
+                            file,
+                            restart,
+                            recording,
+                            block_input,
+                        } => {
+                            conn.keyboard = keyboard;
+                            conn.clipboard = clipboard;
+                            conn.audio = audio;
+                            conn.file = file;
+                            conn.restart = restart;
+                            conn.recording = recording;
+                            conn.block_input = block_input;
+
                             conn.require_2fa.take();
                             if !conn.send_logon_response_and_keep_alive().await {
                                 break;
@@ -1450,6 +1466,10 @@ impl Connection {
             return false;
         }
         self.authorized = true;
+        // [Phase 43] Notify UI that connection is now authorized (auto-close AuthorizeWindow)
+        if let Some(f) = crate::ui_interface::ON_AUTH_SUCCESS.lock().unwrap().as_ref() {
+            f(self.inner.id());
+        }
         let (conn_type, auth_conn_type) = if self.file_transfer.is_some() {
             (1, AuthConnType::FileTransfer)
         } else if self.port_forward_socket.is_some() {
@@ -2186,6 +2206,20 @@ impl Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_cm_ipc(&mut self) {
         if let Some(p) = self.start_cm_ipc_para.take() {
+            // [Phase 25] Tauri Native Authorizer Integration
+            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                let id = self.inner.id();
+                let peer_id = self.lr.my_id.clone();
+                let peer_name = self.lr.my_name.clone();
+                println!("📢 [Tauri Auth] Registering pending connection from {} (id: {})", peer_id, id);
+                
+                crate::ui_interface::PENDING_CONNS.lock().unwrap().insert(id, p.tx_from_cm.clone());
+                if let Some(cb) = crate::ui_interface::ON_INCOMING_CONN.lock().unwrap().as_ref() {
+                    cb(id, peer_id, peer_name);
+                }
+                return;
+            }
+
             tokio::spawn(async move {
                 #[cfg(windows)]
                 let tx_from_cm_clone = p.tx_from_cm.clone();
@@ -2229,8 +2263,45 @@ impl Connection {
         }
         // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            // [Phase 23 Bypass Debug]
+            let my_id = hbb_common::config::Config::get_id();
+            println!("🔍 [Auth Check] Client ID: '{}', Server ID: '{}', APP_NAME: '{}'", lr.my_id, my_id, *hbb_common::config::APP_NAME.read().unwrap());
+
+            // [Phase 26] Immediate Tauri Auth Popup Trigger
+            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                let id = self.inner.id();
+                let peer_id = lr.my_id.clone();
+                let peer_name = lr.my_name.clone();
+                println!("📢 [Tauri Auth] Triggering popup for {} (id: {})", peer_id, id);
+                
+                // We need to register the sender here because handle_login_request_without_validation
+                // might call try_start_cm_ipc which clears the para.
+                // However, we'll let try_start_cm_ipc handle the map registration for consistency.
+            }
+
             self.handle_login_request_without_validation(&lr).await;
+            
+            // [Phase 26] If not authorized yet, trigger the password prompt on the client
+            if !self.authorized && *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                if lr.password.is_empty() {
+                    println!("🔑 [Tauri Auth] Sending error to trigger password prompt on client");
+                    self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG).await;
+                }
+            }
             if self.authorized {
+                // [Phase 26] If authorized (possibly via password), notify Tauri to close any pending popup
+                if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                    let id = self.inner.id();
+                    println!("🛡️ [Tauri Auth] Connection {} authorized. Clearing any popups.", id);
+                    crate::ui_interface::PENDING_CONNS.lock().unwrap().remove(&id);
+                    if let Some(cb) = crate::ui_interface::ON_CANCEL_INCOMING_CONN.lock().unwrap().as_ref() {
+                        cb(id);
+                    }
+                }
+
+                if !self.send_logon_response_and_keep_alive().await {
+                    return false;
+                }
                 return true;
             }
             match lr.union {
@@ -2367,9 +2438,10 @@ impl Connection {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
                 return false;
-            } else if (password::approve_mode() == ApproveMode::Click
+            } else if ((password::approve_mode() == ApproveMode::Click
                 && !allow_logon_screen_password)
-                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
+                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password())
+                && *hbb_common::config::APP_NAME.read().unwrap() != "RustDesk_Tauri"
             {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
                 if hbb_common::get_version_number(&lr.version)
@@ -2393,6 +2465,10 @@ impl Connection {
             } else if lr.password.is_empty() {
                 if err_msg.is_empty() {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
+                    if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                        println!("🔑 [Tauri Auth] Forcing 'Password Required' prompt for client");
+                        self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_EMPTY).await;
+                    }
                 } else {
                     self.send_login_error(
                         crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY,
@@ -3879,6 +3955,8 @@ impl Connection {
                 .user_custom_fps(self.inner.id(), o.custom_fps as _);
         }
         if let Some(q) = o.supported_decoding.clone().take() {
+            println!("📡 [Server] Received decoding update from client: VP9={}, AV1={}, H264={}, prefer={:?}", 
+                q.ability_vp9, q.ability_av1, q.ability_h264, q.prefer);
             scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Update(self.inner.id(), q));
         }
         if let Ok(q) = o.lock_after_session_end.enum_value() {

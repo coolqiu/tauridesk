@@ -250,7 +250,15 @@ pub enum Data {
     ClickTime(i64),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     MouseMoveTime(i64),
-    Authorize,
+    Authorize {
+        keyboard: bool,
+        clipboard: bool,
+        audio: bool,
+        file: bool,
+        restart: bool,
+        recording: bool,
+        block_input: bool,
+    },
     Close,
     #[cfg(windows)]
     SAS,

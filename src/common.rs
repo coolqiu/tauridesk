@@ -1007,7 +1007,8 @@ pub fn get_app_name() -> String {
 
 #[inline]
 pub fn is_rustdesk() -> bool {
-    hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
+    let name = hbb_common::config::APP_NAME.read().unwrap();
+    name.eq("RustDesk") || name.eq("RustDesk_Tauri")
 }
 
 #[inline]

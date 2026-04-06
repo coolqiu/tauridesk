@@ -1284,6 +1284,15 @@ impl<T: InvokeUiSession> Remote<T> {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
+                    // 📡 [Phase 21 Debug] 网络层：接收到视频包
+                    static mut RECV_COUNT: u64 = 0;
+                    unsafe {
+                        RECV_COUNT += 1;
+                        if RECV_COUNT % 60 == 1 {
+                            println!("📡 [Network] Received VideoFrame #{} for display {}, total_size={}", RECV_COUNT, vf.display, data.len());
+                        }
+                    }
+
                     if !self.first_frame {
                         self.first_frame = true;
                         self.handler.close_success();
@@ -1294,6 +1303,19 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.video_format = CodecFormat::from(&vf);
 
                     let display = vf.display as usize;
+                    // Pass encoded frames to UI handler for WebCodecs hardware decoding
+                    use hbb_common::message_proto::video_frame::Union;
+                    match &vf.union {
+                        Some(Union::Vp8s(frames)) | Some(Union::Vp9s(frames)) |
+                        Some(Union::H264s(frames)) | Some(Union::H265s(frames)) |
+                        Some(Union::Av1s(frames)) => {
+                            for frame in &frames.frames {
+                                self.handler.on_encoded_frame(display, self.video_format, frame.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+
                     if !self.video_threads.contains_key(&display) {
                         self.new_video_thread(display);
                     }

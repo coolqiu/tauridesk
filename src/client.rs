@@ -2848,6 +2848,7 @@ pub fn start_video_thread<F, T>(
                         let display = vf.display as usize;
                         let start = std::time::Instant::now();
                         let format = CodecFormat::from(&vf);
+
                         if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
                             let record_state = session.lc.read().unwrap().record_state;
@@ -2859,6 +2860,11 @@ pub fn start_video_thread<F, T>(
                             video_handler = Some(handler);
                         }
                         if let Some(handler) = video_handler.as_mut() {
+                            // Skip Rust software decoding if UI already handles decoding via WebCodecs
+                            if !session.needs_software_decoding() {
+                                return;
+                            }
+
                             let mut pixelbuffer = true;
                             let mut tmp_chroma = None;
                             let format_changed = handler.decoder.format() != format;

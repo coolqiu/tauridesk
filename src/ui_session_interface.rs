@@ -6,6 +6,7 @@ use crate::{
     },
     ui_interface::use_texture_render,
 };
+use scrap::CodecFormat;
 use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -1724,6 +1725,10 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn printer_request(&self, id: i32, path: String);
     fn handle_screenshot_resp(&self, sid: String, msg: String);
     fn handle_terminal_response(&self, response: TerminalResponse);
+    /// Called when receiving an encoded video frame (before decoding), for WebCodecs integration
+    fn on_encoded_frame(&self, display: usize, format: CodecFormat, frame: EncodedVideoFrame) {}
+    /// Return false to skip Rust software decoding when WebCodecs is used (saves CPU)
+    fn needs_software_decoding(&self) -> bool { true }
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

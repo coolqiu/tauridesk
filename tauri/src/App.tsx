@@ -1,177 +1,180 @@
-import { useEffect, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import './App.css'
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { 
+  RefreshCw, Monitor, Zap, Settings, Shield, Clock, Search, 
+  MoreVertical, Heart, MonitorPlay
+} from 'lucide-react';
+import { useServerStore } from './store/serverStore';
+import { usePeerStore } from './store/peerStore';
+import './App.css';
 
 function App() {
-  const [rustDeskId, setRustDeskId] = useState<string>('')
-  const [password, setPassword] = useState<string>('')
-  const [remoteId, setRemoteId] = useState<string>('')
-  const [copied, setCopied] = useState(false)
-  const [activeTab, setActiveTab] = useState<'addressBook' | 'recent'>('addressBook')
+  const { id, temporary_password, fetchServerState, refreshPassword, is_service_running, connect_status } = useServerStore();
+  const { recentPeers, favoriteIds, fetchPeers, toggleFavorite } = usePeerStore();
+  const [remoteId, setRemoteId] = useState('');
 
   useEffect(() => {
-    const fetchId = async () => {
-      try {
-        const id = await invoke<string>('get_id')
-        setRustDeskId(id)
-      } catch (err) {
-        console.error('Failed to fetch RustDesk ID:', err)
-      }
-    }
+    fetchServerState();
+    fetchPeers();
+    
+    const interval = setInterval(() => {
+      fetchServerState();
+    }, 5000);
 
-    fetchId()
-  }, [])
+    return () => {
+      clearInterval(interval);
+    };
+  }, [fetchServerState, fetchPeers]);
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(rustDeskId)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleConnect = async () => {
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!remoteId.trim()) return;
-
     try {
-      const result = await invoke<{success: boolean, message?: string}>('connect', {
-        remote_id: remoteId.trim(),
-        password: password || null,
-        is_file_transfer: false,
-        is_view_camera: false,
-        is_terminal: false,
-        force_relay: false,
-      });
-
-      if (!result.success) {
-        console.error('Failed to connect:', result.message);
-        alert(`Failed to connect: ${result.message || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error('Connection error:', err);
-      alert(`Connection error: ${err}`);
+      await invoke('connect_to_peer', { id: remoteId, password: null });
+    } catch (error) {
+      console.error("Failed to connect:", error);
     }
-  }
+  };
 
   return (
     <div className="app-container">
-      {/* Left Pane - Local Info */}
-      <div className="left-pane">
-        <div className="logo-section">
-          <svg viewBox="0 0 110 54" fill="none" xmlns="http://www.w3.org/2000/svg" className="logo">
-             <path d="M55 0L109.5 54H0L55 0Z" fill="#F65000" />
-          </svg>
-          <h1>RustDesk</h1>
-        </div>
-
-        {/* ID Board */}
-        <div className="id-board">
-          <div className="id-header">
-            <span className="label">ID</span>
-            <button className="more-btn" title="Settings">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="1"></circle>
-                <circle cx="12" cy="5" r="1"></circle>
-                <circle cx="12" cy="19" r="1"></circle>
-              </svg>
-            </button>
-          </div>
-          <div className="id-value-container" onDoubleClick={copyToClipboard}>
-            <span className="id-value">{rustDeskId || '---'}</span>
-            <button className="copy-btn" onClick={copyToClipboard} title="Copy ID">
-              {copied ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Password Board */}
-        <div className="password-board">
-          <div className="password-header">
-            <span className="label">Password</span>
-          </div>
-          <input
-            type="password"
-            placeholder="Unset"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="password-input"
-          />
-        </div>
-
-        {/* Status */}
-        <div className="status-section">
-          <div className="status-dot"></div>
-          <span>Ready for Connection</span>
-        </div>
-
-        {/* Settings button at bottom left */}
-        <button className="settings-fab" title="Settings">
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.588 1.066c1.543-.43 3.025.794 2.595 2.594a1.724 1.724 0 0 0 1.065 2.588c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.588c.43 1.543-.794 3.025-2.594 2.595a1.724 1.724 0 0 0 -2.588 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0 -2.588 -1.066c-1.543.43-3.025-.794-2.595-2.594a1.724 1.724 0 0 0 -1.065 -2.588c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.588c-.43-1.543.794-3.025 2.594-2.595a1.724 1.724 0 0 0 2.588-1.065z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        </button>
+      <div className="dynamic-bg">
+        <div className="gradient-blob blob-1"></div>
+        <div className="gradient-blob blob-2"></div>
       </div>
 
-      {/* Right Pane - Connection */}
-      <div className="divider"></div>
-      <div className="right-pane">
-        {/* Connection Input */}
-        <div className="connection-section">
-          <div className="connection-title">Remote Control</div>
-          <div className="remote-input-container">
-            <input
-              type="text"
-              placeholder="Enter remote ID"
-              value={remoteId}
-              onChange={(e) => setRemoteId(e.target.value)}
-              className="remote-input"
-              onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-            />
-            <button className="connect-btn" onClick={handleConnect} disabled={!remoteId}>
-              Connect
-            </button>
+      <div className="main-layout flex">
+        <section className="left-panel flex-col gap-6">
+          <header className="flex justify-between items-center px-2 py-4">
+            <div className="flex items-center gap-2 logo-container">
+              <div className="logo-icon-wrap">
+                <Monitor color="white" size={24} />
+              </div>
+              <h1 className="logo-text">RustDesk <span className="logo-badge">Tauri</span></h1>
+            </div>
+            <div className="flex gap-2">
+              <button className="icon-btn soft"><Settings size={18} /></button>
+            </div>
+          </header>
+
+          <div className="glass-panel main-card">
+            <div className="card-header flex justify-between items-center">
+              <h2 className="card-title flex items-center gap-2">
+                <Shield size={18} className="text-brand" /> 
+                Your Desktop
+              </h2>
+              <div className={`service-badge ${connect_status === 1 ? 'connected' : (is_service_running ? 'ready' : 'offline')}`}>
+                <div className="status-dot"></div>
+                <span>{connect_status === 1 ? 'Connected' : (is_service_running ? 'Ready' : 'Service Offline')}</span>
+              </div>
+            </div>
+            
+            <div className="card-content flex-col gap-4 mt-6">
+              <div className="info-group box-anim">
+                <label>ID</label>
+                <div className="copy-field">
+                  <span className="value text-xl font-bold font-mono tracking-wider">{id || '---------'}</span>
+                </div>
+              </div>
+
+              <div className="info-group box-anim" style={{ animationDelay: '0.1s' }}>
+                <label>One-time Password</label>
+                <div className="copy-field">
+                  <span className="value font-mono tracking-wider">{temporary_password}</span>
+                  <button onClick={refreshPassword} className="icon-btn hover-spin"><RefreshCw size={16} /></button>
+                </div>
+              </div>
+
+              <div className="action-row mt-4 flex gap-4">
+                <button className="btn btn-secondary w-full">Set Password</button>
+                <button className="btn btn-secondary w-full">Security Rules</button>
+              </div>
+            </div>
           </div>
-        </div>
+          
+          <div className="glass-panel support-card flex items-center gap-4">
+              <div className="icon-square bg-warning-light">
+                <Zap size={24} className="text-warning" />
+              </div>
+              <div className="flex-col">
+                <span className="font-semibold text-sm">Need help?</span>
+                <span className="text-xs text-muted">Join our Discord community or check the documentation.</span>
+              </div>
+          </div>
+        </section>
 
-        {/* Tabs for Address Book / Recent */}
-        <div className="tabs-container">
-          <button
-            className={`tab ${activeTab === 'addressBook' ? 'active' : ''}`}
-            onClick={() => setActiveTab('addressBook')}
-          >
-            Address Book
-          </button>
-          <button
-            className={`tab ${activeTab === 'recent' ? 'active' : ''}`}
-            onClick={() => setActiveTab('recent')}
-          >
-            Recent
-          </button>
-        </div>
+        <section className="right-panel flex-col">
+          <div className="glass-panel remote-control-card flex-col gap-4">
+            <h2 className="card-title flex items-center gap-2">
+              <MonitorPlay size={20} className="text-success" />
+              Control Remote Desktop
+            </h2>
+            <form onSubmit={handleConnect} className="flex gap-2 mt-2">
+              <div className="input-with-icon flex-1">
+                <Search size={18} className="input-icon text-muted" />
+                <input 
+                  type="text" 
+                  className="input pl-10 h-14 text-lg font-mono placeholder:font-sans" 
+                  placeholder="Enter Remote ID..."
+                  value={remoteId}
+                  onChange={e => setRemoteId(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary h-14 px-8 shadow-btn">
+                Connect
+              </button>
+            </form>
+          </div>
 
-        {/* Placeholder for peer list */}
-        <div className="peer-list-container">
-          {activeTab === 'addressBook' ? (
-            <div className="empty-state">
-              <p>No saved peers</p>
+          <div className="recent-list-container flex-col mt-6 flex-1">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="section-title flex items-center gap-2">
+                <Clock size={16} /> Recent Sessions
+              </h3>
             </div>
-          ) : (
-            <div className="empty-state">
-              <p>No recent connections</p>
+
+            <div className="peer-list grid-cols-2 gap-4 auto-rows-max overflow-y-auto pr-2 pb-4">
+              {recentPeers.length === 0 ? (
+                <div className="empty-state text-center py-10 flex-col items-center gap-2 col-span-2">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                    <Monitor size={24} className="text-slate-300" />
+                  </div>
+                  <p className="text-muted text-sm">No recent connections</p>
+                </div>
+              ) : (
+                recentPeers.map((peer, i) => {
+                  const isFav = favoriteIds.includes(peer.id);
+                  return (
+                    <div className="peer-card glass-panel flex justify-between group" key={peer.id} style={{ animationDelay: `${i * 0.05}s` }}>
+                      <div className="flex gap-3">
+                        <div className="peer-avatar">
+                          {peer.alias?.charAt(0) || peer.username?.charAt(0) || peer.id.charAt(0) || '?'}
+                        </div>
+                        <div className="flex-col justify-center">
+                          <span className="font-semibold text-sm peer-name truncate max-w-[120px]">
+                            {peer.alias || peer.username || peer.hostname || "Unknown"}
+                          </span>
+                          <span className="text-xs text-muted font-mono">{peer.id}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="icon-btn" onClick={() => toggleFavorite(peer.id)}>
+                          <Heart size={16} className={isFav ? "fill-danger text-danger" : ""} />
+                        </button>
+                        <button className="icon-btn">
+                          <MoreVertical size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        </section>
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

@@ -362,7 +362,15 @@ pub fn get_click_time() -> i64 {
 pub fn authorize(id: i32) {
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
         client.authorized = true;
-        allow_err!(client.tx.send(Data::Authorize));
+        allow_err!(client.tx.send(Data::Authorize {
+            keyboard: client.keyboard,
+            clipboard: client.clipboard,
+            audio: client.audio,
+            file: client.file,
+            restart: client.restart,
+            recording: client.recording,
+            block_input: client.block_input,
+        }));
     };
 }
 
@@ -686,7 +694,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 self.file_transfer_enabled = *_enabled;
                             }
                         }
-                        Data::Authorize => {
+                        Data::Authorize { .. } => {
                             self.running = true;
                             break;
                         }

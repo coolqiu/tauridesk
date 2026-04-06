@@ -1,0 +1,9 @@
+// commands/mod.rs — v1.0
+// 统一导出所有 Tauri Command 模块
+
+pub mod server;
+pub mod peers;
+pub mod settings;
+pub mod system;
+pub mod session_cmd;
+pub mod auth;
