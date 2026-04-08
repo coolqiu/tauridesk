@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../css/industrial.css">
+    <link rel="stylesheet" href="../css/industrial_controls.css">
+    <style>
+        .page-home { display: flex; height: 100%; width: 100%; border-radius: 0 0 8px 8px; overflow: hidden; }
+        .h-left { width: 260px; background: #FFF; border-right: 1px solid #EEE; padding: 25px; flex-shrink: 0; display: flex; flex-direction: column; }
+        .h-right { flex: 1; padding: 30px; overflow-y: auto; background: #F0F0F0; }
+
+        .id-card { border-left: 4px solid var(--accent); padding-left: 15px; margin-bottom: 30px; }
+        .id-label { font-size: 11px; color: #888; display: flex; justify-content: space-between; align-items: center; }
+        .id-val { font-size: 26px; font-family: "Consolas", monospace; margin: 5px 0; color: #333; }
+        
+        /* THE MISSING LINKS */
+        .h-links { margin-top: auto; border-top: 1px solid #EEE; padding-top: 20px; }
+        .h-link-item { display: block; font-size: 12.5px; color: #0071FF; margin-bottom: 15px; cursor: pointer; text-decoration: none; }
+        .h-link-item:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="page-home">
+        <aside class="h-left">
+            <h2 style="font-size:24px; font-weight:400; margin-top:0;">你的桌面</h2>
+            <p style="font-size:12px; color:#888; margin-bottom:25px;">可以通过下面的 ID 和一次性密码访问此桌面。</p>
+            
+            <div class="id-card">
+                <div class="id-label">ID <span style="cursor:pointer; opacity:0.5;" title="设置">⋮</span></div>
+                <div class="id-val">46 708 702</div>
+            </div>
+
+            <div class="id-card">
+                <div class="id-label">一次性密码 <div style="display:flex; gap:12px;">
+                    <span style="cursor:pointer; opacity:0.5;" title="刷新一代密码">↻</span>
+                    <span style="cursor:pointer; opacity:0.5;" title="修改密码">✎</span>
+                </div></div>
+                <div class="id-val" style="font-size:20px;">q9xm49</div>
+            </div>
+
+            <div class="h-links">
+                <div class="h-link-item">⚙️ 设置固定密码</div>
+                <div class="h-link-item">🛡️ 设置双重认证</div>
+                <div class="h-link-item">👤 未登录</div>
+            </div>
+        </aside>
+
+        <section class="h-right">
+            <div style="max-width:500px; margin:0 auto 30px auto; background:#FFF; border:1px solid #DDD; border-radius:10px; padding:25px; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+                <div style="font-size:17px; margin-bottom:15px; font-weight:600; display:flex; align-items:center; gap:8px;">
+                    控制远程桌面 <span style="opacity:0.3; font-weight:normal; cursor:help; font-size:14px;" title="帮助">ⓘ</span>
+                </div>
+                <input type="text" style="width:100%; height:46px; border:1px solid #DDD; border-radius:6px; font-size:22px; padding:0 12px; box-sizing:border-box; margin-bottom:15px;" placeholder="请输入对方 ID">
+                <div style="display:flex; justify-content:flex-end; position:relative;">
+                    <button class="rs-btn-blue" style="padding:10px 35px; border-radius:6px 0 0 6px;">连接</button>
+                    <div style="position:relative;">
+                        <button class="rs-btn-blue" style="width:36px; height:46px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:0 6px 6px 0; border-left:1px solid rgba(255,255,255,0.2);" title="连接选项" onclick="toggleMenu('connect-menu', event)">▾</button>
+                        <div id="connect-menu" class="rs-menu" style="right:0; top:50px; min-width:140px;">
+                            <div class="rs-menu-item">传输文件</div>
+                            <div class="rs-menu-item">查看摄像头</div>
+                            <div class="rs-menu-item">终端 (beta)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="border-bottom:1px solid #DDD; display:flex; gap:25px; padding-bottom:10px; color:#888; font-size:16px;">
+                <div style="color:#333; border-bottom:2px solid #333; padding-bottom:10px; cursor:pointer;" title="近期会话">🕒</div>
+                <div style="cursor:pointer;" title="收藏">⭐</div>
+                <div style="cursor:pointer; font-size:14px; display:flex; align-items:center;" title="发现">🧭 发现</div>
+                <div style="cursor:pointer; font-size:14px; display:flex; align-items:center;" title="地址簿">👤 地址簿</div>
+                <div style="cursor:pointer; font-size:18px; display:flex; align-items:center;" title="我的组">🖥️</div>
+                
+                <div style="margin-left:auto; display:flex; gap:15px; align-items:center; position:relative;">
+                    <span style="cursor:pointer; font-size:18px; opacity:0.6;" title="搜索">🔍</span>
+                    <span style="cursor:pointer; font-size:18px; opacity:0.6;" title="选择">☑️</span>
+                    
+                    <!-- View Mode Toggle -->
+                    <div style="position:relative;">
+                        <span style="cursor:pointer; font-size:18px; opacity:0.6;" title="更改视图" onclick="toggleMenu('view-menu', event)">☰</span>
+                        <div id="view-menu" class="rs-menu" style="right:0; top:30px; min-width:140px;">
+                            <div class="rs-menu-header">更改视图</div>
+                            <div class="rs-menu-item">
+                                <label><span style="font-size:16px;">⊞</span> 图标</label>
+                                <div class="m-dot"></div>
+                            </div>
+                            <div class="rs-menu-item">
+                                <label><span style="font-size:18px;">〓</span> 磁贴</label>
+                                <div class="m-dot active"></div>
+                            </div>
+                            <div class="rs-menu-item">
+                                <label><span style="font-size:16px;">≡</span> 列表</label>
+                                <div class="m-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sort Menu Toggle -->
+                    <div style="position:relative;">
+                        <span style="cursor:pointer; font-size:16px; opacity:0.6; display:flex; flex-direction:column; gap:2px;" title="排序方式" onclick="toggleMenu('sort-menu', event)">
+                            <div style="width:16px; height:2px; background:#666;"></div>
+                            <div style="width:12px; height:2px; background:#666;"></div>
+                            <div style="width:8px; height:2px; background:#666;"></div>
+                        </span>
+                        <div id="sort-menu" class="rs-menu" style="right:0; top:30px; min-width:140px;">
+                            <div class="rs-menu-header">排序方式</div>
+                            <div class="rs-menu-item"><label>远程 ID</label><div class="m-dot active"></div></div>
+                            <div class="rs-menu-item"><label>远程主机</label><div class="m-dot"></div></div>
+                            <div class="rs-menu-item"><label>用户名</label><div class="m-dot"></div></div>
+                            <div class="rs-menu-item"><label>状态</label><div class="m-dot"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; margin-top:20px;">
+                <!-- Peer Card with Context Menu -->
+                <div style="background:#FFF; border:1px solid #DDD; border-radius:8px; padding:12px; display:flex; gap:10px; cursor:pointer; position:relative;">
+                    <div style="width:36px; height:36px; background:#F5F6F7; border-radius:4px; display:flex; align-items:center; justify-content:center;">🖥️</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600; font-size:13px; display:flex; justify-content:space-between; align-items:center;">
+                            <span><span style="color:#47D1A2;">●</span> 46 708 702</span>
+                            <span style="opacity:0.4; padding:0 4px;" onclick="toggleMenu('peer-menu', event)">⋮</span>
+                        </div>
+                        <div style="font-size:11px; opacity:0.5;">Windows Laptop</div>
+                    </div>
+
+                    <!-- Peer Context Menu -->
+                    <div id="peer-menu" class="rs-menu" style="left:100px; top:20px; width:220px;">
+                        <div class="rs-menu-item">连接</div>
+                        <div class="rs-menu-item">传输文件</div>
+                        <div class="rs-menu-item">查看摄像头</div>
+                        <div class="rs-menu-item">终端 (beta)</div>
+                        <div class="rs-menu-item">终端（以管理员身份运行）(beta)</div>
+                        <div class="rs-menu-item">TCP 隧道</div>
+                        <div class="rs-menu-divider"></div>
+                        <div class="rs-menu-item">
+                            <label>强制走中继连接</label>
+                            <input type="checkbox" style="margin:0;">
+                        </div>
+                        <div class="rs-menu-item">
+                            <label>RDP</label>
+                            <span class="m-icon m-blue">✎</span>
+                        </div>
+                        <div class="rs-menu-item">创建桌面快捷方式</div>
+                        <div class="rs-menu-divider"></div>
+                        <div class="rs-menu-item">重命名</div>
+                        <div class="rs-menu-item">忘记密码</div>
+                        <div class="rs-menu-item">
+                            <label>从收藏中删除</label>
+                            <span class="m-icon m-blue">★</span>
+                        </div>
+                        <div class="rs-menu-divider"></div>
+                        <div class="rs-menu-item danger">
+                            <label>删除</label>
+                            <span class="m-icon m-red">🗑️</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Status Bar -->
+            <div style="position:fixed; bottom:0; left:260px; right:0; height:28px; background:#FFF; border-top:1px solid #EEE; display:flex; align-items:center; padding:0 15px; font-size:12px; color:#666; z-index:100;">
+                <span style="color:#47D1A2; margin-right:8px;">●</span> 就绪, 如果需要更快连接速度, 你可以选择<a href="#" style="color:var(--accent); text-decoration:none; margin-left:4px;">自建服务器</a>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function toggleMenu(id, event) {
+            event.stopPropagation();
+            const menu = document.getElementById(id);
+            const isShowing = menu.classList.contains('show');
+            
+            // Close all other menus
+            document.querySelectorAll('.rs-menu').forEach(m => m.classList.remove('show'));
+            
+            if (!isShowing) {
+                menu.classList.add('show');
+            }
+        }
+
+        // Close menus when clicking anywhere else
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.rs-menu').forEach(m => m.classList.remove('show'));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../css/industrial.css">
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        .viewport { display: flex; height: 100vh; width: 100vw; }
+        .sidebar { width: 220px; background: #FFF; border-right: 1px solid #EEE; padding-top: 15px; flex-shrink: 0; }
+        .nav-item { height: 44px; display: flex; align-items: center; padding: 0 24px; gap: 15px; cursor: pointer; font-size: 14px; color: #5F6368; }
+        .nav-item:hover { background: #F8F9FA; }
+        .nav-item.active { background: #E7F1FF; color: #0071FF; font-weight: 600; border-right: 3px solid #0071FF; }
+        .nav-item svg { width: 20px; height: 20px; stroke-width: 1.8; fill: none; stroke: currentColor; }
+        #settings-frame { flex: 1; border: none; height: 100%; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="viewport">
+        <aside class="sidebar">
+            <div style="padding:10px 24px; font-size:18px; color:#0071FF; font-weight:600; margin-bottom:15px">设置</div>
+            
+            <div class="nav-item active" onclick="loadSub(this, 'general')">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15c.32.8.56 1.65.69 2.53l.11 1a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2l.11-1c.13-.88.37-1.73.69-2.53"/></svg>
+                常规
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'security')">
+                <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                安全
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'network')">
+                <svg viewBox="0 0 24 24"><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                网络
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'display')">
+                <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
+                显示
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'account')">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+                账户
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'plugin')">
+                <svg viewBox="0 0 24 24"><path d="M10 2v4M14 2v4M3 10h4M3 14h4M21 10h-4M21 14h-4M10 18v4M14 18v4"/></svg>
+                插件
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'printer')">
+                <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                打印机
+            </div>
+            <div class="nav-item" onclick="loadSub(this, 'about')">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                关于
+            </div>
+        </aside>
+
+        <iframe id="settings-frame" src="settings_general.html"></iframe>
+    </div>
+
+    <script>
+        function loadSub(el, name) {
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('settings-frame').src = 'settings_' + name + '.html';
+        }
+    </script>
+</body>
+</html>

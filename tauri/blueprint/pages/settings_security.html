@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../css/industrial.css">
+    <link rel="stylesheet" href="../css/industrial_controls.css">
+    <style>
+        .badge-btn { width: 100%; justify-content: center; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,113,255,0.2); }
+        .net-row { display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border-light); cursor: pointer; }
+        .net-row:last-child { border-bottom: none; }
+        .net-icon { width: 22px; height: 22px; color: var(--accent); margin-right: 15px; }
+        .net-label { flex: 1; font-size: 14.5px; color: #333; }
+        .net-arrow { color: #BBB; font-size: 14px; }
+    </style>
+</head>
+<body style="background:transparent; -webkit-font-smoothing: antialiased;">
+    <div class="content">
+        <!-- 🛡️ 安全面板全量补全 -->
+        <div id="sect-security">
+            <button class="rs-btn-blue badge-btn">🛡️ 解锁安全设置</button>
+            <div class="card">
+                <div class="card-title">权限</div>
+                <div class="select-wrapper" style="margin-bottom:15px; position:relative; border:1px solid #ddd; border-radius:4px;">
+                    <select style="background:#f9f9f9; width:100%; height:32px; padding:0 10px; border:none; appearance:none;"><option>自定义</option></select>
+                    <div style="position:absolute; right:10px; top:12px; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid #999;"></div>
+                </div>
+                <div class="grid-2" style="display:grid; grid-template-columns:1fr 1fr; opacity:0.7">
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许控制键盘/鼠标</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许建立 TCP 隧道</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>启用远程打印机</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许远程重启</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许同步剪贴板</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许录制会话</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许传输文件</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许阻止用户输入</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许传输音频</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许远程修改配置</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>允许查看摄像头</span></label>
+                    <label class="rs-checkbox"><input type="checkbox" checked disabled> <div class="box"></div> <span>启用终端</span></label>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">密码</div>
+                <div class="rs-radio"><input type="radio" name="p1" checked> <div class="dot"></div> <span>使用一次性密码</span></div>
+                <div class="rs-radio"><input type="radio" name="p1"> <div class="dot"></div> <span>使用固定密码</span></div>
+                <div class="rs-radio"><input type="radio" name="p1"> <div class="dot"></div> <span>同时使用两种密码</span></div>
+            </div>
+        </div>
+
+        <hr style="border:none; border-top:1px solid #ddd; margin:30px 0;">
+
+        <!-- 🌐 网络面板全量补全 -->
+        <div id="sect-network">
+            <button class="rs-btn-blue badge-btn" style="background:#fff; color:var(--accent); border:1px solid var(--accent); box-shadow:none;">🛡️ 解锁网络设置</button>
+            <div class="card">
+                <div class="net-row">
+                    <svg class="net-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="6" rx="1"/><rect x="2" y="13" width="20" height="6" rx="1"/><circle cx="5" cy="8" r="1"/><circle cx="5" cy="16" r="1"/></svg>
+                    <div class="net-label">ID/中继服务器</div>
+                    <div class="net-arrow">❯</div>
+                </div>
+                <div class="net-row">
+                    <svg class="net-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9m0 0l3-3m-3 3l3 3M4 17h9m0 0l-3-3m3 3l-3 3"/></svg>
+                    <div class="net-label">Socks5/Http(s) 代理</div>
+                    <div class="net-arrow">❯</div>
+                </div>
+                <div class="net-row" style="cursor:default">
+                    <svg class="net-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/></svg>
+                    <div class="net-label">使用 WebSocket <span style="opacity:0.3; font-size:12px; cursor:help">?</span></div>
+                    <div style="width:36px; height:18px; background:#ccc; border-radius:10px; position:relative;"><div style="position:absolute; left:2px; top:2px; width:14px; height:14px; background:#fff; border-radius:50%;"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

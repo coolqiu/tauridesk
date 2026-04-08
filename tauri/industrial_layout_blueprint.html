@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>RustDesk 终极物理对位参考盒</title>
+    <style>
+        :root {
+            --rd-accent: #0071FF;
+            --rd-bg-scaffold: #F2F3F5;
+            --rd-bg-card: #FFFFFF;
+            --rd-text-primary: #1e293b;
+            --rd-text-secondary: #64748b;
+            --rd-border: #CCCCCC;
+            --rd-radius-card: 16px;
+            --rd-radius-inner: 8px;
+            --rd-side-width: 200px;
+            --rd-content-width: 540px;
+        }
+
+        body {
+            margin: 0;
+            padding: 40px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .master-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            background: #fff;
+            border: 1px solid #94a3b8;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .tab-btn.active {
+            background: var(--rd-accent);
+            color: white;
+            border-color: var(--rd-accent);
+        }
+
+        /* 预览窗口 */
+        .preview-window {
+            width: 1024px;
+            height: 720px;
+            background: var(--rd-bg-scaffold);
+            border: 4px solid #334155;
+            position: relative;
+            display: none;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+
+        .preview-window.active { display: flex; }
+
+        /* CAD 标尺系统 */
+        .redline {
+            position: absolute;
+            background: rgba(255, 0, 0, 0.4);
+            border: 1px dashed red;
+            color: red;
+            font-size: 10px;
+            font-weight: bold;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        /* ---------------- [ HOME VIEW ] ---------------- */
+        .side-panel {
+            width: var(--rd-side-width);
+            height: 100%;
+            background: var(--rd-bg-scaffold);
+            border-right: 1px solid var(--rd-border);
+            padding: 20px 11px 20px 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .board-card { display: flex; gap: 7px; }
+        .accent-rail { width: 2px; background: var(--rd-accent); }
+        .board-content { display: flex; flex-direction: column; }
+        .board-label { font-size: 14px; opacity: 0.5; }
+        .board-value { font-size: 22px; font-weight: bold; }
+
+        /* ---------------- [ SETTINGS VIEW ] ---------------- */
+        .settings-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #fff;
+        }
+
+        .setting-card {
+            width: var(--rd-content-width); /* OFFICIAL 540PX */
+            background: var(--rd-bg-scaffold);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .setting-header {
+            font-size: 20px; /* OFFICIAL TITLE FONT */
+            color: var(--rd-accent);
+            margin-bottom: 15px;
+        }
+
+        /* ---------------- [ ADDRESS BOOK ] ---------------- */
+        .ab-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, 220px);
+            gap: 12px;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .peer-card {
+            width: 220px; /* OFFICIAL WIDTH */
+            height: 140px; /* OFFICIAL HEIGHT */
+            border-radius: 16px;
+            overflow: hidden;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            border: 2px solid transparent;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        .peer-card:hover { border-color: var(--rd-accent); }
+
+        .peer-top {
+            flex: 1;
+            background: rgba(0, 113, 255, 0.5); /* ADAPTIVE STR2COLOR */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .peer-bottom {
+            height: 48px;
+            background: #fff;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="master-tabs">
+        <button class="tab-btn active" onclick="switchView('home')">首页 (Home)</button>
+        <button class="tab-btn" onclick="switchView('settings')">设置页 (Settings)</button>
+        <button class="tab-btn" onclick="switchView('ab')">地址簿 (Address Book)</button>
+    </div>
+
+    <!-- HOME PAGE -->
+    <div id="view-home" class="preview-window active">
+        <div class="side-panel">
+            <div style="font-size: 19px; font-weight: bold; margin-bottom: 10px;">你的桌面</div>
+            <div class="board-card">
+                <div class="accent-rail" style="height: 57px;"></div>
+                <div class="board-content">
+                    <span class="board-label">ID</span>
+                    <span class="board-value">467 087 702</span>
+                </div>
+            </div>
+            <div class="board-card">
+                <div class="accent-rail" style="height: 52px;"></div>
+                <div class="board-content">
+                    <span class="board-label">一次性密码</span>
+                    <span class="board-value" style="font-size: 15px; margin-top: 5px;">6nznci</span>
+                </div>
+            </div>
+        </div>
+        <div style="flex:1; padding: 40px; display:flex; justify-content:center; align-items:flex-start;">
+             <div style="width: 360px; padding: 24px 20px; background: white; border-radius: 13px; border: 1px solid #ccc;">
+                  <div style="font-size: 20px; font-weight: bold; margin-bottom: 15px;">控制远程桌面</div>
+                  <div style="height: 44px; background: #f1f5f9; border-radius: 8px; padding: 0 15px; display:flex; align-items:center; font-size: 22px;">请输入伙伴 ID</div>
+             </div>
+        </div>
+        <!-- REDLINES -->
+        <div class="redline" style="top: 0; left: 0; width: 200px; height: 30px;">200px SideWidth</div>
+        <div class="redline" style="top: 55px; left: 20px; width: 2px; height: 57px;">2px Rail</div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div id="view-settings" class="preview-window">
+        <div class="side-panel" style="background: #f8fafc;">
+            <div class="setting-header" style="padding-left: 20px; margin-top: 10px;">设置</div>
+            <div style="background: #e2e8f0; height: 42px; width: 100%; border-left: 4px solid var(--rd-accent); display:flex; align-items:center; padding-left: 15px; font-weight: bold; color: var(--rd-accent);">常规</div>
+            <div style="height: 42px; width: 100%; display:flex; align-items:center; padding-left: 15px; color: #64748b;">安全</div>
+        </div>
+        <div class="settings-content">
+            <div class="setting-card">
+                <div class="setting-header">主题</div>
+                <div style="display:flex; flex-direction:column; gap: 10px; font-size: 15px;">
+                    <label><input type="radio" checked> 浅色</label>
+                    <label><input type="radio"> 深色</label>
+                    <label><input type="radio"> 跟随系统</label>
+                </div>
+                <div class="redline" style="top: -20px; left: 0; width: 540px; height: 20px;">Card Width: 540px</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADDRESS BOOK -->
+    <div id="view-ab" class="preview-window">
+        <div class="ab-grid">
+            <div class="peer-card">
+                <div class="peer-top">
+                    <div style="font-size: 40px;">💻</div>
+                    <div style="font-size: 12px; opacity: 0.7;">rustdesk@pc-01</div>
+                </div>
+                <div class="peer-bottom">
+                    <div style="font-size: 14px; font-weight: bold;">Work-PC</div>
+                    <div style="font-size: 14px; color: var(--rd-accent);">467...</div>
+                </div>
+                <div class="redline" style="top: 0; left: 0; width: 220px; height: 20px;">220px</div>
+                <div class="redline" style="top: 20px; left: 0; width: 20px; height: 140px; writing-mode: vertical-lr;">140px</div>
+            </div>
+            <!-- MOCK CARDS -->
+            <div class="peer-card" style="opacity: 0.5;"></div>
+            <div class="peer-card" style="opacity: 0.5;"></div>
+        </div>
+        <div class="redline" style="top: 20px; left: 232px; width: 12px; height: 50px;">GAP: 12px</div>
+    </div>
+
+    <script>
+        function switchView(view) {
+            document.querySelectorAll('.preview-window').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + view).classList.add('active');
+            event.target.classList.add('active');
+        }
+    </script>
+
+    <div style="margin-top: 40px; color: #475569; max-width: 800px; text-align: center;">
+        <p><b>验收说明：</b> 这是根据官版物理测绘生成的终极模具。如果这个盒子里的几何对位获得了你的批准，我们将以此为 **地基** 重写 React 组件。拒绝任何像素级的偏差。</p>
+    </div>
+
+</body>
+</html>

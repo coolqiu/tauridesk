@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>RustDesk Industrial Blueprint Final</title>
+    <link rel="stylesheet" href="css/industrial.css">
+    <style>
+        .m-tabs { display: flex; height: 100%; align-items: flex-end; margin-left: 20px; }
+        .m-tab { height: 44px; padding: 0 25px; display: flex; align-items: center; font-size: 14px; cursor: pointer; color: #666; transition: 0.2s; position: relative; }
+        .m-tab.active { background: var(--bg-canvas); color: var(--text-main); border-radius: 8px 8px 0 0; font-weight: 600; border: 1px solid #E0E0E0; border-bottom: none; }
+        .m-tab.active::after { content:""; position:absolute; bottom:-1px; left:0; right:0; height:2px; background:var(--bg-canvas); z-index:100; }
+        
+        #content-frame { width: 100%; height: 100%; border: none; }
+        .title-tools { margin-left: auto; display: flex; align-items: center; padding-right: 10px; }
+        .tool-icon { width: 36px; height: 56px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; opacity: 0.5; transition: 0.2s; }
+        .tool-icon:hover { opacity: 1; background: rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body style="overflow: hidden;">
+    <div class="app-root">
+        <header class="header">
+            <!-- Logo Section -->
+            <svg style="width:28px; color:var(--accent); margin: 0 15px;" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M20 6 L26 24 L20 34 L14 24 Z" fill="currentColor"/><circle cx="20" cy="20" r="2" fill="white"/></svg>
+            
+            <nav class="m-tabs">
+                <div class="m-tab active" onclick="switchPage(this, 'home')"><span style="margin-right:8px; font-size:16px;">🏠</span>主页</div>
+                <div class="m-tab" onclick="switchPage(this, 'settings')"><span style="margin-right:8px; font-size:16px;">🔧</span>设置</div>
+            </nav>
+
+            <div class="title-tools">
+                <div class="tool-icon" title="帮助">?</div>
+                <div class="tool-icon" title="账户">👤</div>
+                <div class="tool-icon" title="菜单">☰</div>
+                <div style="width:1px; height:20px; background:#DDD; margin: 0 10px;"></div>
+                <div class="tool-icon" title="最小化">－</div>
+                <div class="tool-icon" title="最大化">▢</div>
+                <div class="tool-icon" style="color:red;" title="关闭">✕</div>
+            </div>
+        </header>
+
+        <main style="flex:1; display:flex; overflow:hidden;">
+            <iframe id="content-frame" src="pages/home.html"></iframe>
+        </main>
+    </div>
+
+    <script>
+        function switchPage(el, page) {
+            document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            const frame = document.getElementById('content-frame');
+            if(page === 'home') frame.src = 'pages/home.html';
+            else frame.src = 'pages/settings_layout.html';
+        }
+    </script>
+</body>
+</html>

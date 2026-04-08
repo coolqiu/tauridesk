@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../css/industrial.css">
+    <link rel="stylesheet" href="../css/industrial_controls.css">
+    <style>
+        /* Precision Refinements for Gutter and Density */
+        .content { padding: 12px 15px; } /* Match original tight spacing from top */
+        .card { 
+            padding: 16px 20px; 
+            margin-bottom: 10px; /* Condensed card-to-card gap */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03); 
+        }
+        .card-title { 
+            font-size: 15px; 
+            font-weight: 600; 
+            margin-bottom: 15px; 
+            color: #333; 
+            letter-spacing: -0.2px;
+        }
+        .select-wrapper { 
+            background: #F9F9F9; 
+            border: 1px solid #E2E2E2; 
+            border-radius: 4px;
+            height: 34px;
+        }
+        select { background: transparent; }
+        .path-link { color: #0071FF; border-bottom: 1px solid #0071FF; text-decoration: none; font-size: 12.5px; }
+        
+        /* Button Shadow Padding */
+        .rs-btn-blue {
+            box-shadow: 0 1px 2px rgba(0,113,255,0.15);
+            font-weight: 500;
+        }
+        
+        /* Checkbox Tightness */
+        .rs-checkbox { margin-bottom: 11px; } 
+    </style>
+</head>
+<body style="background:transparent; -webkit-font-smoothing: antialiased;">
+    <div class="content">
+        
+        <!-- 1. 服务 -->
+        <div class="card">
+            <div class="card-title">服务</div>
+            <button class="rs-btn-blue" style="padding: 10px 28px;">停止</button>
+        </div>
+
+        <!-- 2. 主题 -->
+        <div class="card">
+            <div class="card-title">主题</div>
+            <label class="rs-radio"><input type="radio" name="theme"> <div class="dot"></div> <span>明亮</span></label>
+            <label class="rs-radio"><input type="radio" name="theme"> <div class="dot"></div> <span>黑暗</span></label>
+            <label class="rs-radio"><input type="radio" name="theme" checked> <div class="dot"></div> <span>跟随系统</span></label>
+        </div>
+
+        <!-- 3. 语言 -->
+        <div class="card">
+            <div class="card-title">语言</div>
+            <div class="select-wrapper">
+                <select><option>简体中文 (zh-cn)</option></select>
+                <div style="position:absolute; right:12px; top:13px; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid #888;"></div>
+            </div>
+        </div>
+
+        <!-- 4. 硬件编解码 -->
+        <div class="card">
+            <div class="card-title">硬件编解码</div>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>启用硬件编解码</span></label>
+        </div>
+
+        <!-- 5. 音频输入设备 -->
+        <div class="card">
+            <div class="card-title">音频输入设备</div>
+            <div class="select-wrapper">
+                <select><option>系统音频</option></select>
+                <div style="position:absolute; right:12px; top:13px; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid #888;"></div>
+            </div>
+        </div>
+
+        <!-- 6. 录屏 (HYPER PARITY SYNC) -->
+        <div class="card">
+            <div class="card-title">录屏</div>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>自动录制传入会话</span></label>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>自动录制传出会话</span></label>
+            <div style="font-size:12px; color:#555; margin-top:8px;">被控：C:\ProgramData\RustDesk\recording</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                <div style="font-size:12px; color:#555;">主控：<span class="path-link">C:\Users\qyf\Videos\RustDesk</span></div>
+                <button class="rs-btn-blue" style="padding: 4px 16px; font-size:12px; border-radius:4px;">更改</button>
+            </div>
+        </div>
+
+        <!-- 7. 其他 (FULL 1:1 STATE SYNC) -->
+        <div class="card">
+            <div class="card-title">其他</div>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>关闭多个标签页时向您确认</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>自适应码率</span></label>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>接受会话时移除桌面壁纸</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>在选项卡中打开新连接</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>使用纹理渲染</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>使用 D3D 渲染</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>启动时检查软件更新</span></label>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>自动更新</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>使用 DirectX 捕获屏幕</span></label>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>启用 UDP 打洞</span></label>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>启用 IPv6 P2P 连接</span></label>
+            <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>传出会话期间保持屏幕常亮</span></label>
+            <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>在连接结束时请求备注</span></label>
+        </div>
+    </div>
+</body>
+</html>

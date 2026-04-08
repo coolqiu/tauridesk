@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../css/industrial.css">
+    <link rel="stylesheet" href="../css/industrial_controls.css">
+    <style>
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+        .card { padding: 18px 20px; margin-bottom: 12px; }
+        .card-title { font-weight: 600; margin-bottom: 16px; font-size: 15px; }
+        .rs-checkbox { margin-bottom: 10px; }
+        .slider-row { display: flex; align-items: center; gap: 15px; margin-top: 10px; }
+        .val-badge { background: #eee; padding: 2px 8px; border-radius: 4px; font-size: 11px; min-width: 30px; text-align: center; }
+    </style>
+</head>
+<body style="background:transparent; -webkit-font-smoothing: antialiased;">
+    <div class="content">
+        <div class="card">
+            <div class="card-title">默认显示方式</div>
+            <label class="rs-radio"><input type="radio" name="d1" checked> <div class="dot"></div> <span>原始尺寸</span></label>
+            <label class="rs-radio"><input type="radio" name="d1"> <div class="dot"></div> <span>适应窗口</span></label>
+        </div>
+
+        <div class="card">
+            <div class="card-title">默认滚动方式</div>
+            <label class="rs-radio"><input type="radio" name="d2" checked> <div class="dot"></div> <span>自动滚动</span></label>
+            <label class="rs-radio"><input type="radio" name="d2"> <div class="dot"></div> <span>滚动条</span></label>
+            <label class="rs-radio"><input type="radio" name="d2"> <div class="dot"></div> <span>边缘滚动</span></label>
+        </div>
+
+        <div class="card">
+            <div class="card-title">默认图像质量</div>
+            <label class="rs-radio"><input type="radio" name="d3"> <div class="dot"></div> <span>画质最优化</span></label>
+            <label class="rs-radio"><input type="radio" name="d3" checked> <div class="dot"></div> <span>平衡</span></label>
+            <label class="rs-radio"><input type="radio" name="d3"> <div class="dot"></div> <span>速度最优化</span></label>
+            <label class="rs-radio"><input type="radio" name="d3"> <div class="dot"></div> <span>自定义</span></label>
+        </div>
+
+        <div class="card">
+            <div class="card-title">默认编解码</div>
+            <label class="rs-radio"><input type="radio" name="d4" checked> <div class="dot"></div> <span>自动</span></label>
+            <div class="grid-2" style="padding-left:30px">
+                <label class="rs-radio"><input type="radio" name="d4"> <div class="dot"></div> <span>VP8</span></label>
+                <label class="rs-radio"><input type="radio" name="d4"> <div class="dot"></div> <span>VP9</span></label>
+                <label class="rs-radio"><input type="radio" name="d4"> <div class="dot"></div> <span>AV1</span></label>
+                <label class="rs-radio"><input type="radio" name="d4"> <div class="dot"></div> <span>H264</span></label>
+                <label class="rs-radio"><input type="radio" name="d4"> <div class="dot"></div> <span>H265</span></label>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">默认触控板速度</div>
+            <div class="slider-row">
+                <input type="range" style="flex:1" value="100">
+                <div class="val-badge">100</div> <span style="font-size:12px; opacity:0.6">%</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">其它默认选项</div>
+            <div class="grid-2">
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>浏览模式</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>在工具栏显示监视器</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>折叠工具栏</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>显示远程光标</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>跟随远程光标</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>跟随远程窗口焦点</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>缩放光标</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>显示质量监测</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>静音</span></label>
+                <label class="rs-checkbox"><input type="checkbox" checked> <div class="box"></div> <span>允许复制粘贴文件</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>禁用剪贴板</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>会话结束后锁定远程电脑</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>隐私模式</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>真彩模式 (4:4:4)</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>鼠标滚轮反向</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>交换鼠标左右键</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>在单个窗口中打开显示器</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>将我的所有显示器用于远程会话</span></label>
+                <label class="rs-checkbox"><input type="checkbox"> <div class="box"></div> <span>断开连接时保持终端会话</span></label>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

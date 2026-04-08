@@ -1,0 +1,22 @@
+# RUSTDESK TAURI - ENGINEERING RULES [IRONCLAD]
+
+This project is a Professional Engineering Endeavor, NOT a trial-and-error playground.
+
+## 1. Engineering Integrity
+- **Zero Experimentation**: Do not commit code that is "guessed" or untested in common scenarios. Every line must be deliberate.
+- **Continuity of Logic**: Every new change must be a logical extension of the previous turn. Do not jump between isolated "ideas" or fragmented styles.
+
+## 2. Global Stability & Regression Management
+- **Zero Regression Protocol**: Any update to a component (e.g., RemotePanel) must NOT degrade others (e.g., TitleBar, LocalPanel).
+- **Post-Flight Verification**: Before completing a turn, verify that the TitleBar tabs and window controls are still rendered correctly and the layout layout is intact.
+
+## 3. Incremental Refinement Protocol
+- **Surgical Edits**: Prefer targeting specific lines/blocks over wholesale file rewrites (especially for `index.css`).
+- **Token Discipline**: Reuse the established industrial CSS tokens (`--rd-accent`, `--rd-bg-card`, `.rd-card`). Do not introduce ad-hoc utility classes that conflict with the global theme.
+
+## 4. Visual Parity Standard
+- **Source of Truth**: Official RustDesk Flutter screenshots are the only benchmark. 
+- **Industrial Dignity**: Maintain 1:1 parity in padding, font weights (e.g., 800 for headers), and micro-spacing.
+
+## 5. Deployment Discipline
+- **Absolute Paths**: Always use forward-slash absolute paths (e.g., `e:/projects/rustdesk/tauri/src/...`) to ensure path resolution stability across different environments.

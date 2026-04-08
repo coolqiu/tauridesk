@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, Channel } from '@tauri-apps/api/core';
-import '../App.css';
+import { Lock, Monitor, Info } from 'lucide-react';
+import '../index.css';
 
 // Check if WebCodecs is supported at module level
 const isWebCodecsSupported = typeof VideoDecoder !== 'undefined' && typeof VideoDecoder.isConfigSupported !== 'undefined';
@@ -14,7 +15,7 @@ export default function SessionWindow() {
   const codecSupportSentRef = useRef<boolean>(false);
   const [passwordReq, setPasswordReq] = useState<{ id: string, title: string, text: string } | null>(null);
 
-  // Refs for WebCodecs state to ensure consistency in event handlers and avoid loops
+  // Refs for WebCodecs state
   const decoderRef = useRef<VideoDecoder | null>(null);
   const isWebCodecsSupportedRef = useRef(isWebCodecsSupported);
   const pendingDimensionsRef = useRef<{ width: number, height: number } | null>(null);
@@ -27,7 +28,6 @@ export default function SessionWindow() {
   const isInitializingRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Detect which codecs are supported by this browser via WebCodecs and inform Rust
     const detectAndSendCodecSupport = async () => {
       const testCodec = async (codecStr: string): Promise<boolean> => {
         try {
@@ -43,7 +43,6 @@ export default function SessionWindow() {
         }
       };
 
-      // Priority detection: try to find at least one reliable variation
       let vp9Supported = false;
       for (const variation of ['vp09.00.10.08', 'vp09.01.10.08', 'vp9']) {
         if (await testCodec(variation)) { vp9Supported = true; break; }
@@ -59,7 +58,6 @@ export default function SessionWindow() {
         if (await testCodec(variation)) { av1Supported = true; break; }
       }
 
-      // VP8 is last priority
       let vp8Supported = false;
       for (const variation of ['vp08.00.10.08', 'vp08.01.10.08', 'vp8']) {
         if (await testCodec(variation)) { vp8Supported = true; break; }
@@ -67,26 +65,20 @@ export default function SessionWindow() {
 
       isWebCodecsSupportedRef.current = vp8Supported || vp9Supported || h264Supported || av1Supported;
       
-      console.log(`🎬 [WebCodecs] Browser codec support: vp8=${vp8Supported}, vp9=${vp9Supported}, h264=${h264Supported}, av1=${av1Supported}`);
-      
       if (!isWebCodecsSupportedRef.current) {
-        console.warn('⚠️ [WebCodecs] No hardware acceleration supported, falling back to legacy.');
         setStatus('WebCodecs Not Supported');
         return;
       }
 
       if (id && !codecSupportSentRef.current) {
         codecSupportSentRef.current = true;
-        
-        // Force upgrade to VP9 if available by hiding VP8 support from the peer
         const reportVp8 = vp8Supported && !(vp9Supported || av1Supported);
-        
         invoke('set_browser_supported_codecs', {
           vp8: reportVp8,
           vp9: vp9Supported,
           h264: h264Supported,
           av1: av1Supported
-        }).catch(err => console.error("❌ Failed to send codec support to Rust:", err));
+        }).catch(() => {});
       }
     };
 
@@ -96,10 +88,7 @@ export default function SessionWindow() {
     const videoChannel = new Channel<any>();
 
     const autoCloseOnFrame = () => {
-        if (passwordReq) {
-            console.log("🚀 [Force Close] Video activity detected, closing password modal.");
-            setPasswordReq(null);
-        }
+        if (passwordReq) setPasswordReq(null);
     };
 
     const handleStateUpdate = async () => {
@@ -107,7 +96,7 @@ export default function SessionWindow() {
         try {
             const connected = await invoke<boolean>('is_session_connected', { id });
             if (connected) setPasswordReq(null);
-        } catch (err) { console.error("❌ [Auth State] Failed to check status:", err); }
+        } catch {}
     };
 
     let pollInterval: any = null;
@@ -120,8 +109,6 @@ export default function SessionWindow() {
           decoderRef.current = null;
         }
 
-        console.log(`🎬 [WebCodecs] Initializing decoder for ${format}, ${width}x${height}`);
-
         const codecVariations: string[] = [];
         const normalizedFormat = format.toUpperCase();
         switch (normalizedFormat) {
@@ -130,8 +117,6 @@ export default function SessionWindow() {
           case 'H264': codecVariations.push('h264', 'avc1.42001e', 'avc1.42001f'); break;
           case 'AV1': codecVariations.push('av1', 'av01.0.08M.08'); break;
         }
-
-        console.log(`🎬 [WebCodecs] Trying configs for ${format}:`, codecVariations);
 
         let foundConfig: any = null;
         for (const c of codecVariations) {
@@ -143,7 +128,6 @@ export default function SessionWindow() {
         }
 
         if (!foundConfig) {
-          console.error(`❌ [WebCodecs] No supported configuration found for ${format}`);
           isInitializingRef.current = false;
           return;
         }
@@ -152,12 +136,8 @@ export default function SessionWindow() {
         const newDecoder = new VideoDecoder({
           output: (frame: VideoFrame) => {
             frameCount++;
-            if (frameCount % 60 === 1) {
-              console.log(`🎬 [WebCodecs] Decoded frame #${frameCount}: ${frame.displayWidth}x${frame.displayHeight}`);
-            }
             const canvas = canvasRef.current;
             if (!canvas) {
-              if (frameCount % 60 === 1) console.warn('⚠️ [WebCodecs] Output received but canvas is null');
               frame.close();
               return;
             }
@@ -168,7 +148,6 @@ export default function SessionWindow() {
             }
 
             if (frame.displayWidth !== canvas.width || frame.displayHeight !== canvas.height) {
-              console.log(`📏 [WebCodecs] Resizing canvas to ${frame.displayWidth}x${frame.displayHeight}`);
               canvas.width = frame.displayWidth;
               canvas.height = frame.displayHeight;
             }
@@ -179,9 +158,7 @@ export default function SessionWindow() {
             if (status !== 'WebCodecs Decoding...') setStatus('WebCodecs Decoding...');
           },
           error: (e: any) => {
-            console.error('❌ [WebCodecs] Decoder error callback triggered:', e);
             setStatus(`WebCodecs Error: ${e.message}`);
-            
             if (decoderRef.current) {
                 try { decoderRef.current.close(); } catch {}
                 decoderRef.current = null;
@@ -196,7 +173,6 @@ export default function SessionWindow() {
         decoderRef.current = newDecoder;
         lastDimensionsRef.current = { width, height };
         currentCodecRef.current = format;
-        console.log(`✅ [WebCodecs] Decoder initialized successfully for ${format} ${width}x${height}`);
       } catch (err) {
         console.error('❌ [WebCodecs] Initialization failed:', err);
       } finally {
@@ -238,18 +214,11 @@ export default function SessionWindow() {
       if (!rawPayload) return;
       
       let payload: Uint8Array;
-      if (rawPayload instanceof Uint8Array) {
-          payload = rawPayload;
-      } else if (Array.isArray(rawPayload)) {
-          payload = new Uint8Array(rawPayload);
-      } else if (rawPayload instanceof ArrayBuffer) {
-          payload = new Uint8Array(rawPayload);
-      } else if (rawPayload.buffer instanceof ArrayBuffer) {
-          payload = new Uint8Array(rawPayload.buffer);
-      } else {
-          console.error("❌ [WebCodecs] Unknown payload type:", typeof rawPayload, rawPayload.constructor?.name);
-          return;
-      }
+      if (rawPayload instanceof Uint8Array) payload = rawPayload;
+      else if (Array.isArray(rawPayload)) payload = new Uint8Array(rawPayload);
+      else if (rawPayload instanceof ArrayBuffer) payload = new Uint8Array(rawPayload);
+      else if (rawPayload.buffer instanceof ArrayBuffer) payload = new Uint8Array(rawPayload.buffer);
+      else return;
       
       const buffer = payload.buffer;
       const view = new DataView(buffer, payload.byteOffset, payload.byteLength);
@@ -263,44 +232,31 @@ export default function SessionWindow() {
       }
 
       const codec = CODEC_MAP[typeByte];
-      if (!codec || !isWebCodecsSupportedRef.current) {
-        return;
-      }
+      if (!codec || !isWebCodecsSupportedRef.current) return;
 
       const isKey = view.getUint8(1) === 1;
       let timestamp = view.getBigInt64(2, true);
       const data = new Uint8Array(buffer, 10);
       lastChunkRef.current = data;
 
-      // STRICT KEYFRAME GATE: Ignore everything until a KeyFrame arrives after an error/reset
-      if (needsKeyFrameRef.current && !isKey) {
-         if (frameCountRef.current % 60 === 0) console.log('⏳ [WebCodecs] Waiting for fresh KeyFrame after reset...');
-         frameCountRef.current++;
-         return;
-      }
+      if (needsKeyFrameRef.current && !isKey) return;
 
-      // SYNTHETIC PTS INJECTION: If timestamps are missing (0) or repeated, provide monotonic increase
       if (timestamp <= lastPtsRef.current && !isKey) {
-          timestamp = lastPtsRef.current + BigInt(33); // Simulate 30fps progress
+          timestamp = lastPtsRef.current + BigInt(33); 
       }
       lastPtsRef.current = timestamp;
 
-      // Check if we need to (re)initialize the decoder
       const dims = pendingDimensionsRef.current || { width: 1920, height: 1080 };
       const needsInit = !decoderRef.current || 
                         currentCodecRef.current !== codec || 
                         dims.width !== lastDimensionsRef.current.width;
 
       if (needsInit && !isInitializingRef.current) {
-         console.log(`⚙️ [WebCodecs] Triggering INIT for ${codec} at dims:`, dims);
          isInitializingRef.current = true;
          initWebCodecs(codec, dims.width, dims.height);
       }
 
-      if (isKey) {
-          console.log(`🔑 [WebCodecs] KeyFrame received at ${timestamp}, size=${data.length}, starting decode.`);
-          needsKeyFrameRef.current = false;
-      }
+      if (isKey) needsKeyFrameRef.current = false;
 
       const activeDecoder = decoderRef.current;
       if (activeDecoder && activeDecoder.state === 'configured') {
@@ -311,24 +267,17 @@ export default function SessionWindow() {
             data: data
           }));
           frameCountRef.current++;
-        } catch (e: any) { 
-          console.error("🎬 [WebCodecs] Chunk decode call error:", e);
-          const hex = Array.from(data.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-          console.error(`🔍 [WebCodecs] Faulty Sync hex: ${hex}`);
+        } catch { 
           needsKeyFrameRef.current = true;
           if (id) invoke('refresh_video', { id }).catch(() => {});
         }
-      } else if (!isInitializingRef.current) {
-         if (Number(timestamp) % 100 === 0) {
-           console.log('⚠️ [WebCodecs] Decoder not ready and not initializing.');
-         }
       }
     };
 
     if (id) {
        invoke('force_clear_video_channels', { id })
          .then(() => invoke('listen_video_stream', { id, channel: videoChannel }))
-         .catch(console.error);
+         .catch(() => {});
     }
 
     const unlistenDisplaySize = listen('video-display-size', (event: any) => {
@@ -380,14 +329,24 @@ export default function SessionWindow() {
   };
 
   return (
-    <div className="session-container" style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <div className="session-bar" style={{ background: '#222', color: '#ccc', padding: '4px 12px', fontSize: '12px' }}>
-        Status: {status}
+    <div className="flex-col h-screen w-screen overflow-hidden bg-black">
+      {/* 1. Status Bar (Industrial) */}
+      <div className="rd-titlebar" style={{ height: '36px', background: '#1A1A1A', borderBottom: '1px solid #333' }}>
+          <div className="flex-row gap-3 px-4">
+             <div className="m-blue"><Monitor size={14} /></div>
+             <span style={{ fontSize: '12px', color: '#AAA' }}>会话: {id}</span>
+             <span style={{ fontSize: '12px', color: '#666', marginLeft: '10px' }}>|</span>
+             <span style={{ fontSize: '12px', color: '#888' }}>状态: {status}</span>
+          </div>
+          <div className="flex-row px-4 gap-4">
+             <Info size={14} style={{ color: '#666', cursor: 'help' }} />
+          </div>
       </div>
-      <div style={{ flex: 1, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
         <canvas 
           ref={canvasRef} 
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', cursor: 'none' }}
           onMouseDown={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
           onMouseUp={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
           onMouseMove={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_move', { id, ...c }); }}
@@ -397,69 +356,43 @@ export default function SessionWindow() {
           onKeyUp={e => id && invoke('send_key_event', { id, key: e.code, pressed: false })}
         />
       </div>
+
+      {/* 2. Industrial Password Modal */}
       {passwordReq && (
-        <div className="modal-overlay">
-          <div className="modal-content box-anim" style={{ 
-            background: 'rgba(255, 255, 255, 0.9)', 
-            backdropFilter: 'blur(20px)',
-            borderRadius: '24px',
-            border: '1px solid rgba(255, 255, 255, 0.4)',
-            width: '360px',
-            padding: '2rem'
-          }}>
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-               <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>
-                 {passwordReq.title}
-               </h2>
-               <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
-                 {passwordReq.text}
-               </p>
+        <div className="rs-modal-overlay">
+          <div className="rs-modal-content" style={{ maxWidth: '400px', borderRadius: '12px' }}>
+            <div className="flex-col items-center mb-8">
+               <div className="m-blue mb-4"><Lock size={40} strokeWidth={1.5} /></div>
+               <h2 className="rs-modal-title" style={{ fontSize: '20px' }}>{passwordReq.title}</h2>
+               <p className="rd-panel-desc text-center mt-2">{passwordReq.text}</p>
             </div>
             
-            <div className="password-field-container" style={{ marginTop: '0' }}>
-              <input 
+            <div className="rs-modal-row">
+               <input 
                 type="password" 
-                className="password-input"
+                className="rs-input-gray"
                 autoFocus 
-                placeholder="Enter password..."
+                placeholder="请输入远程访问密码"
                 onKeyDown={e => e.key === 'Enter' && handlePasswordSubmit((e.target as HTMLInputElement).value)}
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '1.5rem' }}>
+            <div className="rs-modal-footer">
               <button 
-                onClick={() => setPasswordReq(null)} 
-                style={{ 
-                  flex: 1, 
-                  padding: '12px', 
-                  borderRadius: '12px', 
-                  background: '#f1f5f9', 
-                  border: 'none', 
-                  color: '#475569', 
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
+                className="rs-btn-blue" 
+                style={{ background: '#F1F3F4', color: '#202124', boxShadow: 'none' }}
+                onClick={() => setPasswordReq(null)}
               >
-                Cancel
+                取消
               </button>
               <button 
+                className="rs-btn-blue" 
                 onClick={() => { 
-                  const input = document.querySelector('.password-input') as HTMLInputElement;
-                  handlePasswordSubmit(input.value);
-                }} 
-                style={{ 
-                  flex: 1, 
-                  padding: '12px', 
-                  borderRadius: '12px', 
-                  background: 'linear-gradient(135deg, #3b82f6, #2563eb)', 
-                  border: 'none', 
-                  color: '#fff', 
-                  fontWeight: '600',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
-                  cursor: 'pointer'
+                   const input = document.querySelector('.rs-input-gray') as HTMLInputElement;
+                   handlePasswordSubmit(input.value);
                 }}
               >
-                Login
+                登录
               </button>
             </div>
           </div>
