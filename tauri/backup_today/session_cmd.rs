@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, Manager, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 use librustdesk::ui_session_interface::Session;
 use librustdesk::client::{Data, Interface};
 use crate::session_handler::TauriHandler;
@@ -418,21 +418,6 @@ pub async fn set_remote_option(id: String, key: String, value: String) -> Result
     let sessions = ACTIVE_SESSIONS.lock().unwrap();
     if let Some(session) = sessions.get(&id) {
         session.set_option(key, value);
-        Ok(())
-    } else {
-        Err(format!("No active session found for '{}'", id))
-    }
-}
-
-#[tauri::command]
-pub async fn switch_display(app: tauri::AppHandle, id: String, display: i32) -> Result<(), String> {
-    let id = id.trim().to_string();
-    let sessions = ACTIVE_SESSIONS.lock().unwrap();
-    if let Some(session) = sessions.get(&id) {
-        session.switch_display(display);
-        println!("🖥️ [Tauri] Sent switch_display({}) to peer: {}", display, id);
-        // Optimistically update the UI to prevent jumping back
-        let _ = app.emit("current-display-changed", display);
         Ok(())
     } else {
         Err(format!("No active session found for '{}'", id))

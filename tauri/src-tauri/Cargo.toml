@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.0.0", features = [] }
 tauri-plugin-log = "2.0.0"
-librustdesk = { package = "rustdesk", path = "../../" }
+librustdesk = { package = "rustdesk", path = "../../", features = ["hwcodec", "vram"] }
 hbb_common = { path = "../../libs/hbb_common" }
 scrap = { path = "../../libs/scrap" }
 windows = { version = "0.61", features = [

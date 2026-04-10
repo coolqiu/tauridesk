@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, Channel } from '@tauri-apps/api/core';
-import { Lock, Monitor, Info, Activity, Cpu, Zap } from 'lucide-react';
+import { Lock, Monitor, Info } from 'lucide-react';
 import RemoteToolbar from '../components/RemoteToolbar';
 import '../index.css';
 
@@ -16,18 +16,13 @@ export default function SessionWindow() {
   const [viewMode, setViewMode] = useState<'contain' | 'cover' | 'original'>('contain');
   const codecSupportSentRef = useRef<boolean>(false);
   const [passwordReq, setPasswordReq] = useState<{ id: string, title: string, text: string } | null>(null);
-  const [displays, setDisplays] = useState<any[]>([]);
-  const [currentDisplay, setCurrentDisplay] = useState<number>(0);
-  const [perfStats, setPerfStats] = useState({ fps: 0, skipped: 0, codec: '' });
-  const lastLoggedFrameCountRef = useRef(0);
 
-  // Refs for WebCodecs state to ensure consistency in event handlers and avoid loops
+  // Refs for WebCodecs state
   const decoderRef = useRef<VideoDecoder | null>(null);
   const isWebCodecsSupportedRef = useRef(isWebCodecsSupported);
   const pendingDimensionsRef = useRef<{ width: number, height: number } | null>(null);
   const lastDimensionsRef = useRef({ width: 0, height: 0 });
   const needsKeyFrameRef = useRef(true);
-  const lastSkippedRef = useRef(0); // Default to no skipping, start from beginning
   const lastChunkRef = useRef<Uint8Array | null>(null);
   const frameCountRef = useRef(0);
   const lastPtsRef = useRef(BigInt(0));
@@ -35,7 +30,6 @@ export default function SessionWindow() {
   const isInitializingRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Detect which codecs are supported by this browser via WebCodecs and inform Rust
     const detectAndSendCodecSupport = async () => {
       const testCodec = async (codecStr: string): Promise<boolean> => {
         try {
@@ -51,17 +45,9 @@ export default function SessionWindow() {
         }
       };
 
-      // Priority detection: try to find at least one reliable variation
-      // Include higher level (4.0/4.1) for 1080p support
       let vp9Supported = false;
-      let selectedVariation = '';
-      for (const variation of ['vp09.00.41.08', 'vp09.00.40.08', 'vp09.00.10.08', 'vp09.02.41.08', 'vp09.01.41.08', 'vp09.01.10.08', 'vp9']) {
-        if (await testCodec(variation)) {
-          vp9Supported = true;
-          selectedVariation = variation;
-          console.log(`🎬 [WebCodecs] Selected VP9 codec: ${variation} (supports 1080p)`);
-          break;
-        }
+      for (const variation of ['vp09.00.10.08', 'vp09.01.10.08', 'vp9']) {
+        if (await testCodec(variation)) { vp9Supported = true; break; }
       }
 
       let h264Supported = false;
@@ -74,34 +60,27 @@ export default function SessionWindow() {
         if (await testCodec(variation)) { av1Supported = true; break; }
       }
 
-      // VP8 is last priority
       let vp8Supported = false;
       for (const variation of ['vp08.00.10.08', 'vp08.01.10.08', 'vp8']) {
         if (await testCodec(variation)) { vp8Supported = true; break; }
       }
 
       isWebCodecsSupportedRef.current = vp8Supported || vp9Supported || h264Supported || av1Supported;
-
-      console.log(`🎬 [WebCodecs] Browser codec support: vp8=${vp8Supported}, vp9=${vp9Supported}, h264=${h264Supported}, av1=${av1Supported}`);
-
+      
       if (!isWebCodecsSupportedRef.current) {
-        console.warn('⚠️ [WebCodecs] No hardware acceleration supported, falling back to legacy.');
         setStatus('WebCodecs Not Supported');
         return;
       }
 
       if (id && !codecSupportSentRef.current) {
         codecSupportSentRef.current = true;
-
-        // Force upgrade to VP9 if available by hiding VP8 support from the peer
         const reportVp8 = vp8Supported && !(vp9Supported || av1Supported);
-
         invoke('set_browser_supported_codecs', {
-          vp8: false,
-          vp9: false, // 🛑 強制關閉 VP9 以避開顯卡驅動 Bug
-          h264: h264Supported, // 🟢 強制與後端協商使用 H.264
+          vp8: reportVp8,
+          vp9: vp9Supported,
+          h264: h264Supported,
           av1: av1Supported
-        }).catch(err => console.error("❌ Failed to send codec support to Rust:", err));
+        }).catch(() => {});
       }
     };
 
@@ -111,18 +90,15 @@ export default function SessionWindow() {
     const videoChannel = new Channel<any>();
 
     const autoCloseOnFrame = () => {
-      if (passwordReq) {
-        console.log("🚀 [Force Close] Video activity detected, closing password modal.");
-        setPasswordReq(null);
-      }
+        if (passwordReq) setPasswordReq(null);
     };
 
     const handleStateUpdate = async () => {
-      if (!id) return;
-      try {
-        const connected = await invoke<boolean>('is_session_connected', { id });
-        if (connected) setPasswordReq(null);
-      } catch (err) { console.error("❌ [Auth State] Failed to check status:", err); }
+        if (!id) return;
+        try {
+            const connected = await invoke<boolean>('is_session_connected', { id });
+            if (connected) setPasswordReq(null);
+        } catch {}
     };
 
     let pollInterval: any = null;
@@ -135,8 +111,6 @@ export default function SessionWindow() {
           decoderRef.current = null;
         }
 
-        console.log(`🎬 [WebCodecs] Initializing decoder for ${format}, ${width}x${height}`);
-
         const codecVariations: string[] = [];
         const normalizedFormat = format.toUpperCase();
         switch (normalizedFormat) {
@@ -146,28 +120,16 @@ export default function SessionWindow() {
           case 'AV1': codecVariations.push('av1', 'av01.0.08M.08'); break;
         }
 
-        console.log(`🎬 [WebCodecs] Trying configs for ${format}:`, codecVariations);
-
         let foundConfig: any = null;
         for (const c of codecVariations) {
-          const config: VideoDecoderConfig = {
-            codec: c,
-            codedWidth: width,
-            codedHeight: height,
-            // 🚀 智能分流：VP9 硬解有致命Bug強製軟解，H264/AV1 啟動滿血純硬件解碼
-            hardwareAcceleration: c.startsWith('vp') ? 'prefer-software' : 'prefer-hardware',
-            optimizeForLatency: true,
-          };
-          
-          Object.assign(config, { _requestedAcceleration: config.hardwareAcceleration });
+          const config = { codec: c, codedWidth: width, codedHeight: height, optimizeForLatency: true };
           try {
             const supported = await VideoDecoder.isConfigSupported(config);
             if (supported.supported) { foundConfig = config; break; }
-          } catch { }
+          } catch {}
         }
 
         if (!foundConfig) {
-          console.error(`❌ [WebCodecs] No supported configuration found for ${format}`);
           isInitializingRef.current = false;
           return;
         }
@@ -176,12 +138,8 @@ export default function SessionWindow() {
         const newDecoder = new VideoDecoder({
           output: (frame: VideoFrame) => {
             frameCount++;
-            if (frameCount % 60 === 1) {
-              console.log(`🎬 [WebCodecs] Decoded frame #${frameCount}: ${frame.displayWidth}x${frame.displayHeight}`);
-            }
             const canvas = canvasRef.current;
             if (!canvas) {
-              if (frameCount % 60 === 1) console.warn('⚠️ [WebCodecs] Output received but canvas is null');
               frame.close();
               return;
             }
@@ -192,7 +150,6 @@ export default function SessionWindow() {
             }
 
             if (frame.displayWidth !== canvas.width || frame.displayHeight !== canvas.height) {
-              console.log(`📏 [WebCodecs] Resizing canvas to ${frame.displayWidth}x${frame.displayHeight}`);
               canvas.width = frame.displayWidth;
               canvas.height = frame.displayHeight;
             }
@@ -200,40 +157,25 @@ export default function SessionWindow() {
             ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
             frame.close();
             autoCloseOnFrame();
-            
-            // WebCodecs standard doesn't officially expose `.acceleration` on VideoDecoder synchronously across all browsers yet.
-            // We use the requested acceleration strategy to reliably report intended hardware mode.
-            const reqMode = (decoderRef.current as any)?._requestedAcceleration || 'prefer-software';
-            const modeStr = reqMode === 'prefer-hardware' ? '[GPU]' : '[CPU]';
-            if (status !== `WebCodecs ${modeStr}`) setStatus(`WebCodecs ${modeStr}`);
+            if (status !== 'WebCodecs Decoding...') setStatus('WebCodecs Decoding...');
           },
           error: (e: any) => {
-            const hex = Array.from(lastChunkRef.current?.subarray(0, 16) || [])
-              .map(b => b.toString(16).padStart(2, '0')).join(' ');
-            console.error(`❌ WebCodecs 拒绝解码！原因: ${e.message} | 数据指纹: ${hex}`);
-            setStatus(`WebCodecs Error: ${e.message}`);
-
-            // If hardware acceleration fails, force re-init with software fallback
+            console.error('❌ [WebCodecs] Decoding error:', e);
+            setStatus(`WebCodecs Error: ${e.message || 'Check console'}`);
             if (decoderRef.current) {
-              try { decoderRef.current.close(); } catch { }
-              decoderRef.current = null;
+                try { decoderRef.current.close(); } catch {}
+                decoderRef.current = null;
             }
             isInitializingRef.current = false;
             needsKeyFrameRef.current = true;
-            lastSkippedRef.current = 0;
-            // Request new key frame after reset
-            setTimeout(() => {
-              if (id) invoke('refresh_video', { id }).catch(() => { });
-            }, 100);
+            if (id) invoke('refresh_video', { id }).catch(() => {});
           }
         });
 
         newDecoder.configure(foundConfig);
-        (newDecoder as any)._requestedAcceleration = foundConfig._requestedAcceleration;
         decoderRef.current = newDecoder;
         lastDimensionsRef.current = { width, height };
         currentCodecRef.current = format;
-        console.log(`✅ [WebCodecs] Decoder initialized successfully for ${format} ${width}x${height}`);
       } catch (err) {
         console.error('❌ [WebCodecs] Initialization failed:', err);
       } finally {
@@ -255,15 +197,15 @@ export default function SessionWindow() {
 
       const imgData = new ImageData(w, h);
       const bytesPerPixel = pixelBytes.length / (w * h);
-
+      
       if (bytesPerPixel === 4) {
         imgData.data.set(pixelBytes);
       } else {
         for (let i = 0; i < pixelBytes.length / 3; i++) {
-          imgData.data[i * 4] = pixelBytes[i * 3];
-          imgData.data[i * 4 + 1] = pixelBytes[i * 3 + 1];
-          imgData.data[i * 4 + 2] = pixelBytes[i * 3 + 2];
-          imgData.data[i * 4 + 3] = 255;
+          imgData.data[i*4] = pixelBytes[i*3];
+          imgData.data[i*4+1] = pixelBytes[i*3+1];
+          imgData.data[i*4+2] = pixelBytes[i*3+2];
+          imgData.data[i*4+3] = 255;
         }
       }
       ctx.putImageData(imgData, 0, 0);
@@ -273,18 +215,18 @@ export default function SessionWindow() {
 
     videoChannel.onmessage = (rawPayload: any) => {
       if (!rawPayload) return;
-
+      
       let payload: Uint8Array;
       if (rawPayload instanceof Uint8Array) payload = rawPayload;
       else if (Array.isArray(rawPayload)) payload = new Uint8Array(rawPayload);
       else if (rawPayload instanceof ArrayBuffer) payload = new Uint8Array(rawPayload);
       else if (rawPayload.buffer instanceof ArrayBuffer) payload = new Uint8Array(rawPayload.buffer);
       else return;
-
+      
       const buffer = payload.buffer;
       const view = new DataView(buffer, payload.byteOffset, payload.byteLength);
       const typeByte = view.getUint8(0);
-
+      
       if (typeByte === 255) {
         const w = view.getUint32(1, true);
         const h = view.getUint32(5, true);
@@ -297,79 +239,54 @@ export default function SessionWindow() {
 
       const isKey = view.getUint8(1) === 1;
       let timestamp = view.getBigInt64(2, true);
-      const rawData = new Uint8Array(buffer, payload.byteOffset + 10, payload.byteLength - 10);
+      const data = new Uint8Array(buffer, payload.byteOffset + 10, payload.byteLength - 10);
+      lastChunkRef.current = data;
 
-      let isActuallyKey = isKey;
-      let data = rawData;
-
-      if (codec === 'VP9') {
-        // 🚨 OVERRIDE RUST BACKEND 🚨
-        // Rust desk sometimes incorrectly Flags delta frames as keyFrames (isKey=1).
-        // A true VP9 keyframe MUST have the sync code 0x49 0x83 0x42 immediately after the frame marker.
-        if (data.length >= 4 && data[1] === 0x49 && data[2] === 0x83 && data[3] === 0x42) {
-          isActuallyKey = true;
-        } else {
-          isActuallyKey = false; // It's a delta frame, no matter what Rust says!
-        }
+      // Bitstream Auditor (Every 100 frames)
+      if (frameCountRef.current % 100 === 0) {
+          const hex = Array.from(data.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          console.log(`🔍 [WebCodecs] Frame Payload Hex (First 16B): ${hex} | Key=${isKey} | Codec=${codec} | Size=${data.length}`);
       }
 
-      // If we need a key frame but this isn't one, skip it
-      if (needsKeyFrameRef.current && !isActuallyKey) {
-        return;
-      }
+      if (needsKeyFrameRef.current && !isKey) return;
 
-      // MONOTONIC PTS
-      if (timestamp <= lastPtsRef.current) timestamp = lastPtsRef.current + BigInt(33333);
+      if (timestamp <= lastPtsRef.current && !isKey) {
+          timestamp = lastPtsRef.current + BigInt(33); 
+      }
       lastPtsRef.current = timestamp;
 
-      // RE-INIT CHECK
       const dims = pendingDimensionsRef.current || { width: 1920, height: 1080 };
-      const needsInit = !decoderRef.current ||
-        currentCodecRef.current !== codec ||
-        dims.width !== lastDimensionsRef.current.width;
+      const needsInit = !decoderRef.current || 
+                        currentCodecRef.current !== codec || 
+                        dims.width !== lastDimensionsRef.current.width;
 
       if (needsInit && !isInitializingRef.current) {
-        console.log(`⚙️ [WebCodecs] Re-initializing for ${codec} @ ${dims.width}x${dims.height}`);
-        isInitializingRef.current = true;
-        if (decoderRef.current) {
-          try { decoderRef.current.close(); } catch { }
-          decoderRef.current = null;
-        }
-        initWebCodecs(codec, dims.width, dims.height);
-        return;
+         isInitializingRef.current = true;
+         initWebCodecs(codec, dims.width, dims.height);
       }
 
-      if (isInitializingRef.current || !decoderRef.current) return;
+      if (isKey) needsKeyFrameRef.current = false;
 
-      if (isActuallyKey) needsKeyFrameRef.current = false;
-
-      // Save last chunk for error debugging
-      lastChunkRef.current = data.slice();
-
-      // DECODE
       const activeDecoder = decoderRef.current;
       if (activeDecoder && activeDecoder.state === 'configured') {
         try {
           activeDecoder.decode(new EncodedVideoChunk({
-            type: isActuallyKey ? 'key' : 'delta',
-            timestamp: Number(timestamp), // PTS from Rust is milliseconds, WebCodecs needs microseconds
-            data: data.slice() // Safe clone for GPU memory management
+            type: isKey ? 'key' : 'delta',
+            timestamp: Number(timestamp),
+            data: data
           }));
           frameCountRef.current++;
-        } catch (e: any) {
-          // Error will be handled by the decoder's error callback
-          const hex = Array.from(lastChunkRef.current?.subarray(0, 16) || [])
-            .map(b => b.toString(16).padStart(2, '0')).join(' ');
-          console.error(`❌ GPU 拒绝解码！原因: ${e.message} | 数据指纹: ${hex}`);
-          // Don't need to do anything here - error callback already handles it
+        } catch { 
+          needsKeyFrameRef.current = true;
+          if (id) invoke('refresh_video', { id }).catch(() => {});
         }
       }
     };
 
     if (id) {
-      invoke('force_clear_video_channels', { id })
-        .then(() => invoke('listen_video_stream', { id, channel: videoChannel }))
-        .catch(console.error);
+       invoke('force_clear_video_channels', { id })
+         .then(() => invoke('listen_video_stream', { id, channel: videoChannel }))
+         .catch(() => {});
     }
 
     const unlistenDisplaySize = listen('video-display-size', (event: any) => {
@@ -384,44 +301,18 @@ export default function SessionWindow() {
     });
 
     const unlistenAuth = listen('connection-authorized', (event: any) => {
-      if (event.payload.peer_id?.replace(/\s/g, '') === id?.replace(/\s/g, '')) setPasswordReq(null);
+        if (event.payload.peer_id?.replace(/\s/g, '') === id?.replace(/\s/g, '')) setPasswordReq(null);
     });
-
-    const unlistenDisplays = listen('displays-updated', (event: any) => {
-      console.log("🖥️ [Tauri Event] DISPLAYS_UPDATED:", event.payload.length, "screens found.");
-      setDisplays(event.payload);
-    });
-
-    const unlistenCurrentDisplay = listen('current-display-changed', (event: any) => {
-      const newIdx = event.payload;
-      console.log(`🖥️ [Tauri Event] CURRENT_DISPLAY_CHANGED -> Index: ${newIdx} (Display ${newIdx + 1})`);
-      setCurrentDisplay(newIdx);
-    });
-
-    // 📊 Trajectory Stats Timer: Update UI every second from refs
-    const statsTimer = setInterval(() => {
-      const currentCount = frameCountRef.current;
-      const fps = currentCount - lastLoggedFrameCountRef.current;
-      lastLoggedFrameCountRef.current = currentCount;
-      setPerfStats({
-        fps,
-        skipped: lastSkippedRef.current < 0 ? 0 : lastSkippedRef.current,
-        codec: currentCodecRef.current || 'None'
-      });
-    }, 1000);
 
     return () => {
-      clearInterval(statsTimer);
       if (pollInterval) clearInterval(pollInterval);
       if (id) {
-        invoke('unlisten_video_stream', { id }).catch(() => { });
-        invoke('force_clear_video_channels', { id }).catch(() => { });
+        invoke('unlisten_video_stream', { id }).catch(() => {});
+        invoke('force_clear_video_channels', { id }).catch(() => {});
       }
       unlistenDisplaySize.then(f => f());
       unlistenMsgbox.then(f => f());
       unlistenAuth.then(f => f());
-      unlistenDisplays.then(f => f());
-      unlistenCurrentDisplay.then(f => f());
       if (decoderRef.current) {
         decoderRef.current.close();
         decoderRef.current = null;
@@ -450,85 +341,37 @@ export default function SessionWindow() {
     <div className="flex-col h-screen w-screen overflow-hidden bg-black">
       {/* 1. Status Bar (Industrial) */}
       <div className="rd-titlebar" style={{ height: '36px', background: '#1A1A1A', borderBottom: '1px solid #333' }}>
-        <div className="flex-row gap-3 px-4">
-          <div className="m-blue"><Monitor size={14} /></div>
-          <span style={{ fontSize: '12px', color: '#AAA' }}>会话: {id}</span>
-          <span style={{ fontSize: '12px', color: '#666', marginLeft: '10px' }}>|</span>
-          <span style={{ fontSize: '12px', color: '#888' }}>状态: {status}</span>
-        </div>
-        <div className="flex-row px-4 gap-4">
-          <Info size={14} style={{ color: '#666', cursor: 'help' }} />
-        </div>
+          <div className="flex-row gap-3 px-4">
+             <div className="m-blue"><Monitor size={14} /></div>
+             <span style={{ fontSize: '12px', color: '#AAA' }}>会话: {id}</span>
+             <span style={{ fontSize: '12px', color: '#666', marginLeft: '10px' }}>|</span>
+             <span style={{ fontSize: '12px', color: '#888' }}>状态: {status}</span>
+          </div>
+          <div className="flex-row px-4 gap-4">
+             <Info size={14} style={{ color: '#666', cursor: 'help' }} />
+          </div>
       </div>
 
       <div className="flex-1 relative flex items-center justify-center overflow-auto bg-[#0a0a0a]">
-        <RemoteToolbar
-          id={id || ''}
+        <RemoteToolbar 
+          id={id || ''} 
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          displays={displays}
-          currentDisplay={currentDisplay}
         />
-
-        {/* 📈 REAL-TIME TRAJECTORY MONITOR */}
-        <div className="rd-perf-monitor">
-          <div className="rd-perf-header">
-            <Activity size={12} /> 軌跡分析
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">路徑:</span>
-            <span className="rd-perf-value active">
-              {decoderRef.current ? (status.includes('[GPU]') ? 'HARDWARE' : 'SOFTWARE') : 'WAITING...'}
-            </span>
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">編碼:</span>
-            <span className="rd-perf-value">{perfStats.codec}</span>
-          </div>
-          <div className="rd-perf-row" title="RustDesk 只有在畫面變更時才會發送數據幀。靜止畫面 0 FPS 屬正常現象，節省帶寬。">
-            <span className="rd-perf-label">幀率:</span>
-            <span className="rd-perf-value">{perfStats.fps} FPS</span>
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">偏移:</span>
-            <span className="rd-perf-value">{perfStats.skipped} bytes</span>
-          </div>
-        </div>
-
-        {/* 🖥️ QUICK DISPLAY SWITCHER */}
-        {displays.length > 1 && (
-          <div className="display-switcher-overlay">
-            {displays.map((_, index) => (
-              <button
-                key={index}
-                onClick={async () => {
-                  try {
-                    await invoke('switch_display', { id, display: index });
-                  } catch (e) { console.error("Switch failed:", e); }
-                }}
-                className={`display-btn ${currentDisplay === index ? 'active' : ''}`}
-                title={`切換到顯示器 ${index + 1}`}
-              >
-                {index + 1}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <canvas
-          ref={canvasRef}
-          style={{
-            maxWidth: viewMode === 'original' ? 'none' : '100%',
-            maxHeight: viewMode === 'original' ? 'none' : '100%',
+        <canvas 
+          ref={canvasRef} 
+          style={{ 
+            maxWidth: viewMode === 'original' ? 'none' : '100%', 
+            maxHeight: viewMode === 'original' ? 'none' : '100%', 
             width: viewMode === 'original' ? `${lastDimensionsRef.current.width}px` : '100%',
             height: viewMode === 'original' ? `${lastDimensionsRef.current.height}px` : '100%',
             objectFit: viewMode === 'contain' ? 'contain' : (viewMode === 'cover' ? 'cover' : 'none'),
-            cursor: 'none'
+            cursor: 'none' 
           }}
           onMouseDown={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
           onMouseUp={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
           onMouseMove={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_move', { id, ...c }); }}
-          onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, delta_x: Math.round(e.deltaX), delta_y: Math.round(e.deltaY) }); }}
+          onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, deltaX: Math.round(e.deltaX), deltaY: Math.round(e.deltaY) }); }}
           onContextMenu={e => e.preventDefault()}
           tabIndex={0}
           onKeyDown={e => id && invoke('send_key_event', { id, key: e.code, pressed: true })}
@@ -541,34 +384,34 @@ export default function SessionWindow() {
         <div className="rs-modal-overlay">
           <div className="rs-modal-content" style={{ maxWidth: '400px', borderRadius: '12px' }}>
             <div className="flex-col items-center mb-8">
-              <div className="m-blue mb-4"><Lock size={40} strokeWidth={1.5} /></div>
-              <h2 className="rs-modal-title" style={{ fontSize: '20px' }}>{passwordReq.title}</h2>
-              <p className="rd-panel-desc text-center mt-2">{passwordReq.text}</p>
+               <div className="m-blue mb-4"><Lock size={40} strokeWidth={1.5} /></div>
+               <h2 className="rs-modal-title" style={{ fontSize: '20px' }}>{passwordReq.title}</h2>
+               <p className="rd-panel-desc text-center mt-2">{passwordReq.text}</p>
             </div>
-
+            
             <div className="rs-modal-row">
-              <input
-                type="password"
+               <input 
+                type="password" 
                 className="rs-input-gray"
-                autoFocus
+                autoFocus 
                 placeholder="请输入远程访问密码"
                 onKeyDown={e => e.key === 'Enter' && handlePasswordSubmit((e.target as HTMLInputElement).value)}
               />
             </div>
 
             <div className="rs-modal-footer">
-              <button
-                className="rs-btn-blue"
+              <button 
+                className="rs-btn-blue" 
                 style={{ background: '#F1F3F4', color: '#202124', boxShadow: 'none' }}
                 onClick={() => setPasswordReq(null)}
               >
                 取消
               </button>
-              <button
-                className="rs-btn-blue"
-                onClick={() => {
-                  const input = document.querySelector('.rs-input-gray') as HTMLInputElement;
-                  handlePasswordSubmit(input.value);
+              <button 
+                className="rs-btn-blue" 
+                onClick={() => { 
+                   const input = document.querySelector('.rs-input-gray') as HTMLInputElement;
+                   handlePasswordSubmit(input.value);
                 }}
               >
                 登录

@@ -163,6 +163,7 @@ pub fn run() {
             commands::session_cmd::send_mouse_move,
             commands::session_cmd::send_wheel,
             commands::session_cmd::send_key_event,
+            commands::session_cmd::switch_display,
             commands::auth::authorize_connection,
             commands::auth::reject_connection,
         ])

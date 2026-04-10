@@ -79,33 +79,11 @@ impl InvokeUiSession for TauriHandler {
         });
     }
 
-    fn switch_display(&self, display: &SwitchDisplay) {
-        println!("🖥️ [Tauri Handler] PEER switched display to: {}", display.display);
-        self.emit("current-display-changed", display.display);
-    }
+    fn switch_display(&self, _display: &SwitchDisplay) {}
 
     fn set_peer_info(&self, _peer_info: &PeerInfo) {}
 
-    fn set_displays(&self, displays: &Vec<DisplayInfo>) {
-        #[derive(serde::Serialize, Clone)]
-        struct DisplayPayload {
-            x: i32,
-            y: i32,
-            width: i32,
-            height: i32,
-            cursor_embedded: bool,
-        }
-        let payload: Vec<DisplayPayload> = displays.iter().map(|d| DisplayPayload {
-            x: d.x,
-            y: d.y,
-            width: d.width,
-            height: d.height,
-            cursor_embedded: d.cursor_embedded,
-        }).collect();
-
-        println!("🖥️ [Tauri Handler] DISPLAYS UPDATED: count={}", payload.len());
-        self.emit("displays-updated", payload);
-    }
+    fn set_displays(&self, _displays: &Vec<DisplayInfo>) {}
 
     fn set_platform_additions(&self, _data: &str) {}
 
@@ -266,10 +244,7 @@ impl InvokeUiSession for TauriHandler {
 
     fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
 
-    fn set_current_display(&self, disp_idx: i32) {
-        println!("🖥️ [Tauri Handler] Current display changed to: {}", disp_idx);
-        self.emit("current-display-changed", disp_idx);
-    }
+    fn set_current_display(&self, _disp_idx: i32) {}
 
     fn update_record_status(&self, _start: bool) {}
 
@@ -282,22 +257,15 @@ impl InvokeUiSession for TauriHandler {
     fn handle_terminal_response(&self, _response: TerminalResponse) {}
 
     fn needs_software_decoding(&self) -> bool {
-        // Set to false to send encoded frames to WebCodecs in frontend
-        // Set to true to decode in Rust and send RGBA pixels (slower but guaranteed to work)
+        // WebCodecs handles decoding in frontend, skip Rust software decoding to save CPU
         false
     }
 
     fn on_encoded_frame(&self, _display: usize, format: CodecFormat, frame: EncodedVideoFrame) {
         // Send encoded frame to JS for WebCodecs hardware decoding
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::atomic::AtomicU64;
         static FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
         
-        let count = FRAME_COUNT.fetch_add(1, Ordering::SeqCst) + 1;
-        if count % 60 == 1 {
-            println!("🗾 [WebCodecs] Encoded frame #{}: {:?}, size={}, key={}",
-                count, format, frame.data.len(), frame.key);
-        }
-
         let clean_id = self.remote_id.trim().to_string();
         let mut failed_to_send = false;
 
@@ -314,13 +282,12 @@ impl InvokeUiSession for TauriHandler {
                 };
                 if format_byte == 255 { return; }
 
-                if count % 60 == 1 {
-                    println!("🗾 [WebCodecs] Dispatching frame to JS channel (v{}) for {}: format={}, key={}", _nonce, clean_id, format_byte, frame.key);
-                }
+                println!("🗾 [WebCodecs] Dispatching frame to JS channel (v{}) for {}: format={}, key={}", _nonce, clean_id, format_byte, frame.key);
 
                 let mut binary = Vec::with_capacity(10 + frame.data.len());
                 binary.push(format_byte);
                 binary.push(if frame.key { 1 } else { 0 });
+                // Note: RustDesk frame.pts is usually in milliseconds
                 binary.extend_from_slice(&frame.pts.to_le_bytes());
                 binary.extend_from_slice(&frame.data);
 

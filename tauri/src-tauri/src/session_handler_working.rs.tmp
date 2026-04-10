@@ -79,33 +79,11 @@ impl InvokeUiSession for TauriHandler {
         });
     }
 
-    fn switch_display(&self, display: &SwitchDisplay) {
-        println!("🖥️ [Tauri Handler] PEER switched display to: {}", display.display);
-        self.emit("current-display-changed", display.display);
-    }
+    fn switch_display(&self, _display: &SwitchDisplay) {}
 
     fn set_peer_info(&self, _peer_info: &PeerInfo) {}
 
-    fn set_displays(&self, displays: &Vec<DisplayInfo>) {
-        #[derive(serde::Serialize, Clone)]
-        struct DisplayPayload {
-            x: i32,
-            y: i32,
-            width: i32,
-            height: i32,
-            cursor_embedded: bool,
-        }
-        let payload: Vec<DisplayPayload> = displays.iter().map(|d| DisplayPayload {
-            x: d.x,
-            y: d.y,
-            width: d.width,
-            height: d.height,
-            cursor_embedded: d.cursor_embedded,
-        }).collect();
-
-        println!("🖥️ [Tauri Handler] DISPLAYS UPDATED: count={}", payload.len());
-        self.emit("displays-updated", payload);
-    }
+    fn set_displays(&self, _displays: &Vec<DisplayInfo>) {}
 
     fn set_platform_additions(&self, _data: &str) {}
 
@@ -266,10 +244,7 @@ impl InvokeUiSession for TauriHandler {
 
     fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
 
-    fn set_current_display(&self, disp_idx: i32) {
-        println!("🖥️ [Tauri Handler] Current display changed to: {}", disp_idx);
-        self.emit("current-display-changed", disp_idx);
-    }
+    fn set_current_display(&self, _disp_idx: i32) {}
 
     fn update_record_status(&self, _start: bool) {}
 
@@ -282,8 +257,7 @@ impl InvokeUiSession for TauriHandler {
     fn handle_terminal_response(&self, _response: TerminalResponse) {}
 
     fn needs_software_decoding(&self) -> bool {
-        // Set to false to send encoded frames to WebCodecs in frontend
-        // Set to true to decode in Rust and send RGBA pixels (slower but guaranteed to work)
+        // WebCodecs handles decoding in frontend, skip Rust software decoding to save CPU
         false
     }
 

@@ -23,7 +23,7 @@ export default function RemotePanel() {
   const onConnect = (id: string | null) => {
     const targetId = id || remoteId;
     if (!targetId) return;
-    invoke('connect', { id: targetId }).catch(err => {
+    invoke('connect_to_peer', { id: targetId }).catch(err => {
        console.error("Connection failed:", err);
     });
     setActiveMenuId(null);

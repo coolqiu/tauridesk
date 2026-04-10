@@ -796,3 +796,85 @@ body { background: var(--rd-bg-scaffold); color: var(--rd-text-primary); height:
 .rs-checkbox input:checked ~ .box:after {
     display: block;
 }
+
+/* 10. REAL-TIME TRAJECTORY MONITOR (INDUSTRIAL) */
+.rd-perf-monitor {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px 15px;
+    color: #FFF;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    z-index: 2000;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    min-width: 160px;
+}
+
+.rd-perf-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    color: var(--rd-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rd-perf-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+}
+
+.rd-perf-label { color: #888; }
+.rd-perf-value { color: #DDD; }
+.rd-perf-value.active { color: #57bb8a; }
+
+.display-switcher-overlay {
+    position: fixed;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid #444;
+    border-radius: 20px;
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    animation: slide-up 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes slide-up {
+    from { transform: translate(-50%, 40px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.display-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #333;
+    color: #FFF;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.display-btn:hover { background: #444; }
+.display-btn.active { background: var(--rd-accent); box-shadow: 0 0 10px var(--rd-accent); }

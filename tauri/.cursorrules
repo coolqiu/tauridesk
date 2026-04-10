@@ -20,3 +20,9 @@ This project is a Professional Engineering Endeavor, NOT a trial-and-error playg
 
 ## 5. Deployment Discipline
 - **Absolute Paths**: Always use forward-slash absolute paths (e.g., `e:/projects/rustdesk/tauri/src/...`) to ensure path resolution stability across different environments.
+## 6. Delivery & Testing Protocol
+- **Verification Requirement**: For every delivered work result, you MUST provide:
+    - **Test Objective**: What exactly was being verified.
+    - **Method**: How it was tested (e.g., specific manual steps, API checks).
+    - **Result**: The confirmed outcome.
+- **Rule Consistency**: Keep this rule active for all future deliveries.
