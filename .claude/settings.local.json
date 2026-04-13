@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(find . -name \"*.tsx\" -exec grep -l \"[一-龥]\" {} \\\\;)"
     ]
   }
 }

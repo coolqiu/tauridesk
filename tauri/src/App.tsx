@@ -25,14 +25,13 @@ export default function App() {
     fetchPeers();
     fetchOptions(['theme', 'enable-hwcodec', 'codec-priority', 'enable-abr']);
     
-    // TEMPORARILY DISABLED TO STOP RUST STACK OVERFLOW
-    /*
+    // 每 8 秒轮询服务器状态（ID / 密码及连接状态）
+    // get_server_state 已改为 async + spawn_blocking，不会造成堆栈溢出
     const interval = setInterval(() => {
       fetchServerState();
-    }, 5000);
+    }, 8000);
 
     return () => clearInterval(interval);
-    */
   }, [fetchServerState, fetchPeers, fetchOptions]);
 
   return (

@@ -283,17 +283,42 @@ pub async fn send_wheel(id: String, _x: i32, _y: i32, delta_x: i32, delta_y: i32
 }
 
 #[tauri::command]
-pub async fn send_key_event(id: String, key: String, pressed: bool) -> Result<(), String> {
+pub async fn send_key_event(
+    id: String,
+    key: String,
+    pressed: bool,
+    ctrl: Option<bool>,
+    shift: Option<bool>,
+    alt: Option<bool>,
+    meta: Option<bool>,
+) -> Result<(), String> {
     let id = id.trim().to_string();
     let sessions = ACTIVE_SESSIONS.lock().unwrap();
     if let Some(session) = sessions.get(&id) {
-        // Convert from JS KeyEvent code to RustDesk KeyEvent
         use hbb_common::protos::message::KeyboardMode;
+        use hbb_common::message_proto::ControlKey;
         let mut msg_out = Message::new();
         let mut key_event = KeyEvent::new();
         key_event.set_seq(key);
         key_event.press = pressed;
         key_event.mode = KeyboardMode::Auto.into();
+
+        // Build modifier mask
+        let mut modifiers = vec![];
+        if ctrl.unwrap_or(false) {
+            modifiers.push(hbb_common::protobuf::EnumOrUnknown::new(ControlKey::Control));
+        }
+        if shift.unwrap_or(false) {
+            modifiers.push(hbb_common::protobuf::EnumOrUnknown::new(ControlKey::Shift));
+        }
+        if alt.unwrap_or(false) {
+            modifiers.push(hbb_common::protobuf::EnumOrUnknown::new(ControlKey::Alt));
+        }
+        if meta.unwrap_or(false) {
+            modifiers.push(hbb_common::protobuf::EnumOrUnknown::new(ControlKey::Meta));
+        }
+        key_event.modifiers = modifiers;
+
         msg_out.set_key_event(key_event);
         if let Some(sender) = session.sender.read().unwrap().as_ref() {
             if let Err(e) = sender.send(Data::Message(msg_out)) {

@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Plus, Search, ListFilter, LayoutGrid, 
   Monitor, Laptop, Smartphone, MoreVertical,
-  User, CheckCircle2, XCircle
+  User, CheckCircle2
 } from 'lucide-react';
 
 export default function AddressBook() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -22,7 +24,7 @@ export default function AddressBook() {
       {/* 1. TOP HEADER (INDUSTRIAL ALIGNMENT) */}
       <div className="flex-row justify-between">
          <div className="flex-row gap-2">
-            <h1 className="text-[20px] font-bold text-[var(--rd-text-primary)]">地址簿</h1>
+            <h1 className="text-[20px] font-bold text-[var(--rd-text-primary)]">{t('Address Book')}</h1>
             <span className="bg-[var(--rd-bg-scaffold)] text-[11px] font-bold px-1.5 py-0.5 rounded opacity-40">
                {peers.length}
             </span>
@@ -30,7 +32,7 @@ export default function AddressBook() {
          <div className="flex-row gap-4">
             <button className="flex-row gap-2 px-6 py-2 bg-[var(--rd-accent)] text-white rounded text-[13.5px] font-bold shadow-sm hover:brightness-110 active:scale-95 transition-all">
                <Plus size={16} strokeWidth={2.5} />
-               添加设备
+               {t('Add Device')}
             </button>
          </div>
       </div>
@@ -39,9 +41,9 @@ export default function AddressBook() {
       <div className="flex-row justify-between border-b border-[var(--rd-border)]">
          <div className="flex-row gap-[32px] pl-2"> {/* RIGID INDUSTRIAL GAP */}
             {[
-              { id: 'all', label: '全部' },
-              { id: 'online', label: '在线' },
-              { id: 'offline', label: '离线' }
+              { id: 'all', label: t('All') },
+              { id: 'online', label: t('Online') },
+              { id: 'offline', label: t('Offline') }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -102,11 +104,11 @@ export default function AddressBook() {
       <div className="pt-6 border-t border-[var(--rd-border)] flex-row justify-between text-[12px] text-[var(--rd-text-secondary)]">
          <div className="flex-row gap-3">
             <User size={14} />
-            <span>5 个设备</span>
+            <span>{peers.length} {t('Devices')}</span>
          </div>
          <div className="flex-row gap-4 opacity-50">
-            <span className="hover:text-[var(--rd-text-primary)] cursor-pointer">修改分组</span>
-            <span className="hover:text-[var(--rd-text-primary)] cursor-pointer">删除选中</span>
+            <span className="hover:text-[var(--rd-text-primary)] cursor-pointer">{t('Edit Group')}</span>
+            <span className="hover:text-[var(--rd-text-primary)] cursor-pointer">{t('Delete Selected')}</span>
          </div>
       </div>
     </div>

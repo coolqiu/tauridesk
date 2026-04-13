@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, Channel } from '@tauri-apps/api/core';
-import { Lock, Monitor, Info, Activity, Cpu, Zap } from 'lucide-react';
+import { Lock, Monitor, Info, Activity, Scaling, Maximize, RotateCcw, MousePointer2, ExternalLink, Keyboard, Minimize } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import RemoteToolbar from '../components/RemoteToolbar';
 import '../index.css';
 
@@ -11,6 +12,7 @@ const isWebCodecsSupported = typeof VideoDecoder !== 'undefined' && typeof Video
 
 export default function SessionWindow() {
   const { id } = useParams<{ id: string }>();
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<string>('Initializing...');
   const [viewMode, setViewMode] = useState<'contain' | 'cover' | 'original'>('contain');
@@ -18,7 +20,15 @@ export default function SessionWindow() {
   const [passwordReq, setPasswordReq] = useState<{ id: string, title: string, text: string } | null>(null);
   const [displays, setDisplays] = useState<any[]>([]);
   const [currentDisplay, setCurrentDisplay] = useState<number>(0);
-  const [perfStats, setPerfStats] = useState({ fps: 0, skipped: 0, codec: '' });
+  const [showRemoteCursor, setShowRemoteCursor] = useState<boolean>(true);
+  const showRemoteCursorRef = useRef(true);
+  const viewModeRef = useRef<'contain' | 'cover' | 'original'>('contain');
+  const [perfStats, setPerfStats] = useState({ fps: 0, speed: '-', delay: '-', codec: '' });
+  const [remoteOptions, setRemoteOptions] = useState<Record<string, boolean>>({
+    'block-input': false,
+    'privacy-mode': false,
+    'lock-kb': false
+  });
   const lastLoggedFrameCountRef = useRef(0);
 
   // Refs for WebCodecs state to ensure consistency in event handlers and avoid loops
@@ -33,6 +43,13 @@ export default function SessionWindow() {
   const lastPtsRef = useRef(BigInt(0));
   const currentCodecRef = useRef<string | null>(null);
   const isInitializingRef = useRef<boolean>(false);
+
+  // 远端光标状态
+  const cursorXRef = useRef(0);
+  const cursorYRef = useRef(0);
+  const cursorDivRef = useRef<HTMLDivElement | null>(null);
+  const cursorImageCacheRef = useRef<Map<string, string>>(new Map()); // cursorId -> dataURI
+  const currentCursorIdRef = useRef<string>('');
 
   useEffect(() => {
     // Detect which codecs are supported by this browser via WebCodecs and inform Rust
@@ -54,11 +71,9 @@ export default function SessionWindow() {
       // Priority detection: try to find at least one reliable variation
       // Include higher level (4.0/4.1) for 1080p support
       let vp9Supported = false;
-      let selectedVariation = '';
       for (const variation of ['vp09.00.41.08', 'vp09.00.40.08', 'vp09.00.10.08', 'vp09.02.41.08', 'vp09.01.41.08', 'vp09.01.10.08', 'vp9']) {
         if (await testCodec(variation)) {
           vp9Supported = true;
-          selectedVariation = variation;
           console.log(`🎬 [WebCodecs] Selected VP9 codec: ${variation} (supports 1080p)`);
           break;
         }
@@ -93,13 +108,10 @@ export default function SessionWindow() {
       if (id && !codecSupportSentRef.current) {
         codecSupportSentRef.current = true;
 
-        // Force upgrade to VP9 if available by hiding VP8 support from the peer
-        const reportVp8 = vp8Supported && !(vp9Supported || av1Supported);
-
         invoke('set_browser_supported_codecs', {
-          vp8: false,
-          vp9: false, // 🛑 強制關閉 VP9 以避開顯卡驅動 Bug
-          h264: h264Supported, // 🟢 強制與後端協商使用 H.264
+          vp8: vp8Supported,
+          vp9: vp9Supported,
+          h264: h264Supported,
           av1: av1Supported
         }).catch(err => console.error("❌ Failed to send codec support to Rust:", err));
       }
@@ -329,13 +341,15 @@ export default function SessionWindow() {
         dims.width !== lastDimensionsRef.current.width;
 
       if (needsInit && !isInitializingRef.current) {
-        console.log(`⚙️ [WebCodecs] Re-initializing for ${codec} @ ${dims.width}x${dims.height}`);
+        const curW = dims.width || 1920;
+        const curH = dims.height || 1080;
+        console.log(`⚙️ [WebCodecs] Re-initializing for ${codec} @ ${curW}x${curH}`);
         isInitializingRef.current = true;
         if (decoderRef.current) {
           try { decoderRef.current.close(); } catch { }
           decoderRef.current = null;
         }
-        initWebCodecs(codec, dims.width, dims.height);
+        initWebCodecs(codec, curW, curH);
         return;
       }
 
@@ -398,16 +412,103 @@ export default function SessionWindow() {
       setCurrentDisplay(newIdx);
     });
 
+    // 📍 远端光标渲染事件监听
+    const unlistenCursorPos = listen('cursor-position', (event: any) => {
+      const { x, y } = event.payload;
+      const canvas = canvasRef.current;
+      if (!canvas || !lastDimensionsRef.current.width) return;
+      const rect = canvas.getBoundingClientRect();
+      // 将远端坐标映射到本地 canvas 展示坐标
+      const scaleX = rect.width / lastDimensionsRef.current.width;
+      const scaleY = rect.height / lastDimensionsRef.current.height;
+      cursorXRef.current = rect.left + x * scaleX;
+      cursorYRef.current = rect.top + y * scaleY;
+      if (!cursorDivRef.current) return;
+      if (!showRemoteCursorRef.current) {
+        cursorDivRef.current.style.display = 'none';
+        return;
+      }
+      cursorDivRef.current.style.left = `${cursorXRef.current}px`;
+      cursorDivRef.current.style.top = `${cursorYRef.current}px`;
+      cursorDivRef.current.style.display = 'block';
+    });
+
+    const unlistenCursorId = listen('cursor-id', (event: any) => {
+      const newId = String(event.payload);
+      currentCursorIdRef.current = newId;
+      const cached = cursorImageCacheRef.current.get(newId);
+      if (cached && cursorDivRef.current && showRemoteCursorRef.current) {
+        cursorDivRef.current.style.backgroundImage = `url(${cached})`;
+      }
+    });
+
+    const unlistenCursorData = listen('cursor-data', (event: any) => {
+      const { id, hotx, hoty, width, height, colors } = event.payload;
+      try {
+        // 将 base64 RGBA 转为 dataURI
+        const binaryStr = atob(colors);
+        const bytes = new Uint8ClampedArray(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const offscreen = new OffscreenCanvas(width, height);
+        const ctx2 = offscreen.getContext('2d')!;
+        const imgData = new ImageData(bytes, width, height);
+        ctx2.putImageData(imgData, 0, 0);
+        offscreen.convertToBlob().then(blob => {
+          const dataUri = URL.createObjectURL(blob);
+          const cursorId = String(id);
+          cursorImageCacheRef.current.set(cursorId, dataUri);
+          if (currentCursorIdRef.current === cursorId && cursorDivRef.current) {
+            cursorDivRef.current.style.backgroundImage = `url(${dataUri})`;
+            cursorDivRef.current.style.backgroundSize = `${width}px ${height}px`;
+            cursorDivRef.current.style.width = `${width}px`;
+            cursorDivRef.current.style.height = `${height}px`;
+            cursorDivRef.current.style.marginLeft = `${-hotx}px`;
+            cursorDivRef.current.style.marginTop = `${-hoty}px`;
+          }
+        });
+      } catch (e) {
+        console.error('❌ [Cursor] Failed to render cursor image:', e);
+      }
+    });
+
+    // 📋 剪贴板双向同步
+    const unlistenRemoteClipboard = listen<string>('remote-clipboard', (event) => {
+      const text = event.payload;
+      if (text) navigator.clipboard.writeText(text).catch(() => {});
+    });
+
+    const unlistenQualityStatus = listen<{ speed: string, delay: string }>('quality-status', (event) => {
+      setPerfStats(prev => ({
+        ...prev,
+        speed: event.payload.speed,
+        delay: event.payload.delay
+      }));
+    });
+
+    const unlistenRemoteOption = listen<{ key: string, value: boolean }>('remote-option-changed', (event) => {
+      setRemoteOptions(prev => ({
+        ...prev,
+        [event.payload.key]: event.payload.value
+      }));
+    });
+
+    // 监听本地 paste，将内容发送给远端
+    const handlePaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text/plain');
+      if (text && id) invoke('send_clipboard_text', { id, text }).catch(() => {});
+    };
+    window.addEventListener('paste', handlePaste);
+
     // 📊 Trajectory Stats Timer: Update UI every second from refs
     const statsTimer = setInterval(() => {
       const currentCount = frameCountRef.current;
       const fps = currentCount - lastLoggedFrameCountRef.current;
       lastLoggedFrameCountRef.current = currentCount;
-      setPerfStats({
+      setPerfStats(prev => ({
+        ...prev,
         fps,
-        skipped: lastSkippedRef.current < 0 ? 0 : lastSkippedRef.current,
         codec: currentCodecRef.current || 'None'
-      });
+      }));
     }, 1000);
 
     return () => {
@@ -422,12 +523,40 @@ export default function SessionWindow() {
       unlistenAuth.then(f => f());
       unlistenDisplays.then(f => f());
       unlistenCurrentDisplay.then(f => f());
+      unlistenCursorPos.then(f => f());
+      unlistenCursorId.then(f => f());
+      unlistenCursorData.then(f => f());
+      unlistenRemoteClipboard.then(f => f());
+      unlistenQualityStatus.then(f => f());
+      unlistenRemoteOption.then(f => f());
+      window.removeEventListener('paste', handlePaste);
       if (decoderRef.current) {
         decoderRef.current.close();
         decoderRef.current = null;
       }
+      // 清理光标 blob URL 缓存
+      cursorImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
+      cursorImageCacheRef.current.clear();
+      decoderRef.current = null;
     };
   }, [id]);
+
+  // Handle immediate visual toggle for remote cursor
+  useEffect(() => {
+    showRemoteCursorRef.current = showRemoteCursor;
+    if (cursorDivRef.current) {
+      if (!showRemoteCursor) {
+        cursorDivRef.current.style.display = 'none';
+      } else {
+        // If we have an active cursor, it will show on next position event
+      }
+    }
+  }, [showRemoteCursor]);
+
+  // Update viewMode ref
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
 
   const handlePasswordSubmit = async (password: string) => {
     if (!passwordReq) return;
@@ -447,51 +576,58 @@ export default function SessionWindow() {
   };
 
   return (
-    <div className="flex-col h-screen w-screen overflow-hidden bg-black">
+    <div className="flex-col h-screen w-screen overflow-hidden" style={{ background: '#000' }}>
       {/* 1. Status Bar (Industrial) */}
       <div className="rd-titlebar" style={{ height: '36px', background: '#1A1A1A', borderBottom: '1px solid #333' }}>
         <div className="flex-row gap-3 px-4">
           <div className="m-blue"><Monitor size={14} /></div>
-          <span style={{ fontSize: '12px', color: '#AAA' }}>会话: {id}</span>
+          <span style={{ fontSize: '12px', color: '#AAA' }}>{t('Session')}: {id}</span>
           <span style={{ fontSize: '12px', color: '#666', marginLeft: '10px' }}>|</span>
-          <span style={{ fontSize: '12px', color: '#888' }}>状态: {status}</span>
+          <span style={{ fontSize: '12px', color: '#888' }}>{t('Status')}: {status}</span>
         </div>
         <div className="flex-row px-4 gap-4">
           <Info size={14} style={{ color: '#666', cursor: 'help' }} />
         </div>
       </div>
 
-      <div className="flex-1 relative flex items-center justify-center overflow-auto bg-[#0a0a0a]">
+      <div className="flex-1 relative flex items-center justify-center overflow-auto" style={{ background: '#0a0a0a' }}>
         <RemoteToolbar
           id={id || ''}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           displays={displays}
           currentDisplay={currentDisplay}
+          showRemoteCursor={showRemoteCursor}
+          setShowRemoteCursor={setShowRemoteCursor}
+          remoteOptions={remoteOptions}
         />
 
         {/* 📈 REAL-TIME TRAJECTORY MONITOR */}
         <div className="rd-perf-monitor">
           <div className="rd-perf-header">
-            <Activity size={12} /> 軌跡分析
+            <Activity size={12} /> {t('Session Quality')}
           </div>
           <div className="rd-perf-row">
-            <span className="rd-perf-label">路徑:</span>
+            <span className="rd-perf-label">{t('Path')}:</span>
             <span className="rd-perf-value active">
-              {decoderRef.current ? (status.includes('[GPU]') ? 'HARDWARE' : 'SOFTWARE') : 'WAITING...'}
+              {decoderRef.current ? (status.includes('[GPU]') ? 'HARDWARE+' : 'SOFTWARE') : 'WAITING...'}
             </span>
           </div>
           <div className="rd-perf-row">
-            <span className="rd-perf-label">編碼:</span>
+            <span className="rd-perf-label">{t('Codec')}:</span>
             <span className="rd-perf-value">{perfStats.codec}</span>
           </div>
-          <div className="rd-perf-row" title="RustDesk 只有在畫面變更時才會發送數據幀。靜止畫面 0 FPS 屬正常現象，節省帶寬。">
-            <span className="rd-perf-label">幀率:</span>
-            <span className="rd-perf-value">{perfStats.fps} FPS</span>
+          <div className="rd-perf-row">
+            <span className="rd-perf-label">{t('FPS')}:</span>
+            <span className="rd-perf-value highlight">{perfStats.fps} FPS</span>
           </div>
           <div className="rd-perf-row">
-            <span className="rd-perf-label">偏移:</span>
-            <span className="rd-perf-value">{perfStats.skipped} bytes</span>
+            <span className="rd-perf-label">{t('Speed')}:</span>
+            <span className="rd-perf-value">{perfStats.speed}</span>
+          </div>
+          <div className="rd-perf-row">
+            <span className="rd-perf-label">{t('Delay')}:</span>
+            <span className="rd-perf-value">{perfStats.delay}</span>
           </div>
         </div>
 
@@ -520,10 +656,11 @@ export default function SessionWindow() {
           style={{
             maxWidth: viewMode === 'original' ? 'none' : '100%',
             maxHeight: viewMode === 'original' ? 'none' : '100%',
-            width: viewMode === 'original' ? `${lastDimensionsRef.current.width}px` : '100%',
-            height: viewMode === 'original' ? `${lastDimensionsRef.current.height}px` : '100%',
+            width: viewMode === 'original' ? (lastDimensionsRef.current.width ? `${lastDimensionsRef.current.width}px` : '100%') : '100%',
+            height: viewMode === 'original' ? (lastDimensionsRef.current.height ? `${lastDimensionsRef.current.height}px` : '100%') : '100%',
             objectFit: viewMode === 'contain' ? 'contain' : (viewMode === 'cover' ? 'cover' : 'none'),
-            cursor: 'none'
+            cursor: 'none',
+            display: decoderRef.current ? 'block' : 'none'
           }}
           onMouseDown={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
           onMouseUp={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
@@ -531,8 +668,36 @@ export default function SessionWindow() {
           onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, delta_x: Math.round(e.deltaX), delta_y: Math.round(e.deltaY) }); }}
           onContextMenu={e => e.preventDefault()}
           tabIndex={0}
-          onKeyDown={e => id && invoke('send_key_event', { id, key: e.code, pressed: true })}
-          onKeyUp={e => id && invoke('send_key_event', { id, key: e.code, pressed: false })}
+          onKeyDown={e => {
+            e.preventDefault();
+            if (id) invoke('send_key_event', {
+              id, key: e.code, pressed: true,
+              ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey
+            });
+          }}
+          onKeyUp={e => {
+            e.preventDefault();
+            if (id) invoke('send_key_event', {
+              id, key: e.code, pressed: false,
+              ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey
+            });
+          }}
+        />
+
+        {/* 🖱️ 远端光标覆盖层 — 跟随远端光标位置 */}
+        <div
+          ref={cursorDivRef}
+          style={{
+            position: 'fixed',
+            display: 'none',
+            pointerEvents: 'none', // 不拦截鼠标事件
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: '0 0',
+            zIndex: 999,
+            // 初始尺寸，cursor-data 事件会动态更新
+            width: '16px',
+            height: '16px',
+          }}
         />
       </div>
 
@@ -551,7 +716,7 @@ export default function SessionWindow() {
                 type="password"
                 className="rs-input-gray"
                 autoFocus
-                placeholder="请输入远程访问密码"
+                placeholder={t('Enter Password')}
                 onKeyDown={e => e.key === 'Enter' && handlePasswordSubmit((e.target as HTMLInputElement).value)}
               />
             </div>
@@ -562,7 +727,7 @@ export default function SessionWindow() {
                 style={{ background: '#F1F3F4', color: '#202124', boxShadow: 'none' }}
                 onClick={() => setPasswordReq(null)}
               >
-                取消
+                {t('Cancel')}
               </button>
               <button
                 className="rs-btn-blue"
@@ -571,7 +736,7 @@ export default function SessionWindow() {
                   handlePasswordSubmit(input.value);
                 }}
               >
-                登录
+                {t('Login')}
               </button>
             </div>
           </div>

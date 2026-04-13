@@ -22,38 +22,50 @@ pub fn get_id() -> String {
 }
 
 /// 获取完整的服务端状态（一次性返回所有关键字段）
+/// 使用 spawn_blocking 避免在 Tauri async 运行时线程上直接调用同步 IPC（防止死锁/堆栈溢出）
 #[tauri::command]
-pub fn get_server_state() -> ServerState {
-    let id = librustdesk::ipc::get_id();
-    let temporary_password = librustdesk::ui_interface::temporary_password();
-    let permanent_password_set = librustdesk::ui_interface::is_permanent_password_set();
-    let verification_method = librustdesk::ui_interface::get_option("verification-method");
-    let approve_mode = librustdesk::ui_interface::get_option("approve-mode");
+pub async fn get_server_state() -> ServerState {
+    hbb_common::tokio::task::spawn_blocking(|| {
+        let id = librustdesk::ipc::get_id();
+        let temporary_password = librustdesk::ui_interface::temporary_password();
+        // is_permanent_password_set 会做 IPC 调用，必须在 blocking 线程中
+        let permanent_password_set = librustdesk::ui_interface::is_permanent_password_set();
+        let verification_method = librustdesk::ui_interface::get_option("verification-method");
+        let approve_mode = librustdesk::ui_interface::get_option("approve-mode");
+        let connect_status = librustdesk::ui_interface::get_connect_status().status_num;
 
-    // RustDesk 后端通过 UiStatus 获取包含 status_num 的连接状态
-    let ui_status = librustdesk::ui_interface::get_connect_status();
-
-    ServerState {
-        id,
-        temporary_password: if temporary_password.is_empty() {
-            "Generating...".to_string()
-        } else {
-            temporary_password
-        },
-        permanent_password_set,
-        verification_method: if verification_method.is_empty() {
-            "use-both-passwords".to_string()
-        } else {
-            verification_method
-        },
-        approve_mode: if approve_mode.is_empty() {
-            "password".to_string()
-        } else {
-            approve_mode
-        },
-        connect_status: ui_status.status_num,
-        is_service_running: true, // Tauri 模式下服务随应用启动
-    }
+        ServerState {
+            id,
+            temporary_password: if temporary_password.is_empty() {
+                "Generating...".to_string()
+            } else {
+                temporary_password
+            },
+            permanent_password_set,
+            verification_method: if verification_method.is_empty() {
+                "use-both-passwords".to_string()
+            } else {
+                verification_method
+            },
+            approve_mode: if approve_mode.is_empty() {
+                "password".to_string()
+            } else {
+                approve_mode
+            },
+            connect_status,
+            is_service_running: true,
+        }
+    })
+    .await
+    .unwrap_or_else(|_| ServerState {
+        id: String::new(),
+        temporary_password: "Error".to_string(),
+        permanent_password_set: false,
+        verification_method: "use-both-passwords".to_string(),
+        approve_mode: "password".to_string(),
+        connect_status: -1,
+        is_service_running: false,
+    })
 }
 
 /// 获取临时密码

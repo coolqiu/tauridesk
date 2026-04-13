@@ -7,3 +7,4 @@ pub mod settings;
 pub mod system;
 pub mod session_cmd;
 pub mod auth;
+pub mod clipboard_cmd;

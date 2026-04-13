@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Monitor, Keyboard, Zap, ChevronDown, 
-  RefreshCcw, MousePointer2, Maximize, 
+import { useTranslation } from 'react-i18next';
+import {
+  Monitor, Keyboard, Zap, ChevronDown,
+  RefreshCcw, MousePointer2, Maximize,
   Minimize, Scaling, FileText, Settings,
-  MessageSquare, ExternalLink
+  MessageSquare, ExternalLink, Lock, Fullscreen, FullscreenExit
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface RemoteToolbarProps {
   id: string;
@@ -14,15 +16,102 @@ interface RemoteToolbarProps {
   viewMode: 'contain' | 'cover' | 'original';
   displays?: any[];
   currentDisplay?: number;
+  showRemoteCursor?: boolean;
+  setShowRemoteCursor?: (show: boolean) => void;
+  remoteOptions?: Record<string, boolean>;
 }
 
-export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays = [], currentDisplay = 0 }: RemoteToolbarProps) {
+export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays = [], currentDisplay = 0, showRemoteCursor = true, setShowRemoteCursor = () => {}, remoteOptions = {} }: RemoteToolbarProps) {
+  const { t } = useTranslation();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
   const [isPinned, setIsPinned] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [position, setPosition] = useState<{ top: number, left: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const toolbarRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Load pinned state, collapsed state and position from storage on mount
+  useEffect(() => {
+    invoke<boolean>('get_local_option', { key: 'toolbar-pinned' })
+      .then(saved => setIsPinned(saved))
+      .catch(() => setIsPinned(false));
+
+    const savedCollapsed = localStorage.getItem('rustdesk-toolbar-collapsed');
+    if (savedCollapsed !== null) {
+      setIsCollapsed(savedCollapsed === 'true');
+    }
+
+    const savedPos = localStorage.getItem('rustdesk-toolbar-position');
+    if (savedPos) {
+      try {
+        setPosition(JSON.parse(savedPos));
+      } catch {
+        setPosition(null);
+      }
+    }
+  }, []);
+
+  // Save pinned state when changed
+  useEffect(() => {
+    invoke('set_local_option', { key: 'toolbar-pinned', value: isPinned })
+      .catch(() => {});
+  }, [isPinned]);
+
+  // Save collapsed state when changed
+  useEffect(() => {
+    localStorage.setItem('rustdesk-toolbar-collapsed', JSON.stringify(isCollapsed));
+  }, [isCollapsed]);
+
+  // Save position when changed
+  useEffect(() => {
+    if (position) {
+      localStorage.setItem('rustdesk-toolbar-position', JSON.stringify(position));
+    }
+  }, [position]);
+
+  const toggleFullscreen = async () => {
+    const window = getCurrentWindow();
+    const newFullscreen = !isFullscreen;
+    await window.setFullscreen(newFullscreen);
+    setIsFullscreen(newFullscreen);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isPinned) return; // Only allow dragging when pinned
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - (position?.left ?? 0),
+      y: e.clientY - (position?.top ?? 0)
+    });
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const newLeft = e.clientX - dragStart.x;
+    const newTop = e.clientY - dragStart.y;
+    setPosition({ top: newTop, left: newLeft });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging]);
 
   const toggleMenu = (menuId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -54,100 +143,149 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
 
   const menuItems = {
     display: [
-      { label: '缩放: 等比例', active: viewMode === 'contain', onClick: () => onViewModeChange('contain'), icon: <Scaling size={14}/> },
-      { label: '缩放: 原始尺寸', active: viewMode === 'original', onClick: () => onViewModeChange('original'), icon: <Maximize size={14}/> },
+      { label: t('Scale: Contain'), active: viewMode === 'contain', onClick: () => onViewModeChange('contain'), icon: <Scaling size={14}/> },
+      { label: t('Scale: Original'), active: viewMode === 'original', onClick: () => onViewModeChange('original'), icon: <Maximize size={14}/> },
       { divider: true },
       // Dynamic Monitor List
       ...displays.map((_d, idx) => ({
-        label: `显示器 ${idx + 1}`,
+        label: t('Display') + ` ${idx + 1}`,
         active: currentDisplay === idx,
         onClick: () => invoke('switch_display', { id, display: idx }),
         icon: <Monitor size={14} />
       })),
       { divider: true },
-      { label: '刷新画面', onClick: () => invoke('refresh_video', { id }), icon: <RefreshCcw size={14}/> },
-      { label: '显示远程光标', active: true, icon: <MousePointer2 size={14}/> },
+      { label: t('Refresh'), onClick: () => invoke('refresh_video', { id }), icon: <RefreshCcw size={14}/> },
+      { label: t('Show Remote Cursor'), active: showRemoteCursor, onClick: () => setShowRemoteCursor(!showRemoteCursor), icon: <MousePointer2 size={14}/>, isToggle: true },
     ],
     input: [
-        { label: '允许控制', active: true, icon: <Keyboard size={14}/> },
-        { label: '锁定键盘与鼠标', active: false, onClick: () => invoke('set_remote_option', { id, key: 'lock-kb', value: 'Y' }), icon: <Minimize size={14}/> },
+        { label: t('Connect'), active: true, icon: <Keyboard size={14}/>, isToggle: true },
+        { 
+          label: t('Lock Remote'), 
+          active: remoteOptions['lock-kb'], 
+          onClick: () => invoke('set_remote_option', { id, key: 'lock-kb', value: remoteOptions['lock-kb'] ? 'N' : 'Y' }), 
+          icon: <Minimize size={14}/>, 
+          isToggle: true 
+        },
         { divider: true },
-        { label: '映射键盘模式', active: true },
-        { label: '传统键盘模式', active: false },
+        { label: t('Mapped Keyboard'), active: true },
+        { label: t('Legacy Keyboard'), active: false },
     ],
     actions: [
         { label: '发送 Ctrl+Alt+Del', onClick: () => invoke('send_ctrl_alt_del', { id }), icon: <ExternalLink size={14}/> },
-        { label: '锁定远程计算机', onClick: () => invoke('set_remote_option', { id, key: 'lock-remote', value: 'Y' }), icon: <Minimize size={14}/> },
-        { label: '显示桌面', icon: <Monitor size={14}/> },
+        { label: t('Lock Remote'), onClick: () => invoke('set_remote_option', { id, key: 'lock-remote', value: 'Y' }), icon: <Lock size={14}/> },
+        { label: t('Privacy Mode'), active: remoteOptions['privacy-mode'], onClick: () => invoke('set_remote_option', { id, key: 'privacy-mode', value: remoteOptions['privacy-mode'] ? 'N' : 'Y' }), icon: <Monitor size={14}/>, isToggle: true },
         { divider: true },
-        { label: '禁止用户输入', active: false, onClick: () => invoke('set_remote_option', { id, key: 'block-input', value: 'Y' }) },
+        { label: t('Block Input'), active: remoteOptions['block-input'], onClick: () => invoke('set_remote_option', { id, key: 'block-input', value: remoteOptions['block-input'] ? 'N' : 'Y' }), isToggle: true },
     ]
   };
 
   return (
     <>
-      <div 
-        ref={toolbarRef}
-        className={`rd-session-toolbar ${isVisible || isPinned ? 'visible' : ''}`}
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '4px 12px',
-          background: 'rgba(26, 26, 26, 0.95)',
-          border: '1px solid #333',
-          borderTop: 'none',
-          borderRadius: '0 0 8px 8px',
-          zIndex: 1000,
-          boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-          transition: 'transform 0.2s ease-out, opacity 0.2s',
-          opacity: isVisible || isPinned ? 1 : 0,
-          pointerEvents: isVisible || isPinned ? 'auto' : 'none',
-          marginTop: isVisible || isPinned ? '0' : '-40px'
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="toolbar-section">
+      {isCollapsed ? (
+        // Collapsed state - only show small handle
+        <div
+          ref={toolbarRef}
+          className="rd-session-toolbar-collapsed"
+          style={{
+            position: 'fixed',
+            top: position?.top ?? 4,
+            left: position?.left ?? 10,
+            width: '28px',
+            height: '28px',
+            background: 'rgba(26, 26, 26, 0.95)',
+            border: '1px solid #333',
+            borderRadius: '4px',
+            zIndex: 1000,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+            cursor: isPinned ? 'move' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            userSelect: 'none',
+          }}
+          onMouseDown={isPinned ? handleMouseDown : undefined}
+          onClick={() => setIsCollapsed(false)}
+        >
+          ⋮
+        </div>
+      ) : (
+        // Expanded state - full toolbar
+        <div
+          ref={toolbarRef}
+          className={`rd-session-toolbar ${isVisible || isPinned ? 'visible' : ''} ${isDragging ? 'dragging' : ''}`}
+          style={{
+            position: 'fixed',
+            top: position?.top ?? 0,
+            left: position?.left ?? '50%',
+            transform: position ? 'none' : 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 12px',
+            background: 'rgba(26, 26, 26, 0.95)',
+            border: '1px solid #333',
+            borderTop: 'none',
+            borderRadius: '0 0 8px 8px',
+            zIndex: 1000,
+            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+            transition: isDragging ? 'none' : 'transform 0.2s ease-out, opacity 0.2s',
+            opacity: isVisible || isPinned ? 1 : 0,
+            pointerEvents: isVisible || isPinned ? 'auto' : 'none',
+            marginTop: isVisible || isPinned ? '0' : '-40px',
+            cursor: isPinned ? 'move' : 'default',
+            userSelect: 'none',
+          }}
+          onMouseDown={handleMouseDown}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="toolbar-section">
             <button className={`toolbar-btn ${activeMenu === 'display' ? 'active' : ''}`} onClick={(e) => toggleMenu('display', e)}>
-                <Monitor size={16} /> <span>显示</span> <ChevronDown size={12} />
+              <Monitor size={16} /> <span>{t('Display')}</span> <ChevronDown size={12} />
             </button>
             <button className={`toolbar-btn ${activeMenu === 'input' ? 'active' : ''}`} onClick={(e) => toggleMenu('input', e)}>
-                <Keyboard size={16} /> <span>输入</span> <ChevronDown size={12} />
+              <Keyboard size={16} /> <span>{t('Input')}</span> <ChevronDown size={12} />
             </button>
             <button className={`toolbar-btn ${activeMenu === 'actions' ? 'active' : ''}`} onClick={(e) => toggleMenu('actions', e)}>
-                <Zap size={16} /> <span>操作</span> <ChevronDown size={12} />
+              <Zap size={16} /> <span>{t('Action')}</span> <ChevronDown size={12} />
             </button>
-        </div>
-        
-        <div style={{ width: '1px', height: '18px', background: '#333', margin: '0 8px' }} />
+          </div>
 
-        <div className="toolbar-section">
-            <button className="toolbar-btn" title="查看消息" onClick={() => {}}>
-                <MessageSquare size={16} />
-            </button>
-            <button className="toolbar-btn" title="显示器切换" onClick={() => {}}>
-                <Maximize size={16} />
-            </button>
-            <button className="toolbar-btn" title="文件传输" onClick={() => {}}>
-                <FileText size={16} />
-            </button>
-            <button className="toolbar-btn" title="设置" onClick={() => {}}>
-                <Settings size={16} />
-            </button>
-        </div>
+          <div style={{ width: '1px', height: '18px', background: '#333', margin: '0 8px' }} />
 
-        <button 
-           className="toolbar-pin" 
-           style={{ color: isPinned ? 'var(--rd-accent)' : '#888', marginLeft: '10px' }}
-           onClick={() => setIsPinned(!isPinned)}
-        >
+          <div className="toolbar-section">
+            <button className="toolbar-btn" title={t('Fullscreen')} onClick={toggleFullscreen}>
+              <Fullscreen size={16} />
+            </button>
+            <button className="toolbar-btn" title={t('Chat')} onClick={() => {}}>
+              <MessageSquare size={16} />
+            </button>
+            <button className="toolbar-btn" title={t('File Transfer')} onClick={() => {}}>
+              <FileText size={16} />
+            </button>
+            <button className="toolbar-btn" title={t('Settings')} onClick={() => {}}>
+              <Settings size={16} />
+            </button>
+          </div>
+
+          <button
+            className="toolbar-collapse-handle"
+            style={{ color: '#888', marginLeft: '8px', cursor: 'pointer', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setIsCollapsed(true)}
+            title={t('Collapse')}
+          >
+            ⏏
+          </button>
+
+          <button
+             className="toolbar-pin"
+             style={{ color: isPinned ? 'var(--rd-accent)' : '#888', marginLeft: '4px', cursor: 'pointer', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+             onClick={() => setIsPinned(!isPinned)}
+             title={t('Pin Toolbar')}
+          >
             <div style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(-45deg)', transition: '0.2s' }}>📌</div>
-        </button>
-      </div>
+          </button>
+        </div>
+      )}
 
       {activeMenu && menuPos && createPortal(
         <div 
@@ -171,7 +309,11 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
                             <span>{item.label}</span>
                         </div>
                         {item.active !== undefined && (
-                            <div className={`m-dot ${item.active ? 'active' : ''}`} style={{ borderColor: '#444' }} />
+                            item.isToggle ? (
+                                <div className={`m-check ${item.active ? 'active' : ''}`} style={{ borderColor: '#444' }} />
+                            ) : (
+                                <div className={`m-dot ${item.active ? 'active' : ''}`} style={{ borderColor: '#444' }} />
+                            )
                         )}
                     </div>
                 )
@@ -214,6 +356,30 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
         }
         .rd-menu-item:hover {
             background: #2A2A2A !important;
+        }
+        .m-check {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1px solid #CCC;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            position: relative;
+        }
+        .m-check.active {
+            background: var(--rd-accent);
+            border-color: var(--rd-accent) !important;
+        }
+        .m-check.active::after {
+            content: "";
+            width: 3px;
+            height: 7px;
+            border: solid white;
+            border-width: 0 1.5px 1.5px 0;
+            transform: rotate(45deg);
+            margin-bottom: 2px;
         }
       `}</style>
     </>

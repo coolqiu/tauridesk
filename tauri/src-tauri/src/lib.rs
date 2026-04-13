@@ -166,6 +166,7 @@ pub fn run() {
             commands::session_cmd::switch_display,
             commands::auth::authorize_connection,
             commands::auth::reject_connection,
+            commands::clipboard_cmd::send_clipboard_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

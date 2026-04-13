@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { 
-  Home, Settings, HelpCircle, User, 
-  Menu, Minus, Square, X 
+import {
+  Home, Settings, HelpCircle, User,
+  Menu, Minus, Square, X
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // Safe window helper
 const getAppWindow = () => {
@@ -22,6 +23,7 @@ interface TitleBarProps {
 }
 
 export default function TitleBar({ activeTab, onTabChange }: TitleBarProps) {
+  const { t } = useTranslation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
@@ -37,50 +39,50 @@ export default function TitleBar({ activeTab, onTabChange }: TitleBarProps) {
          </div>
 
          <div className="rd-titlebar-tabs">
-            <button 
+            <button
               onClick={() => onTabChange('home')}
               className={`rd-titlebar-tab ${activeTab === 'home' ? 'active' : ''}`}
             >
                <Home size={16} style={{ marginRight: '8px' }} />
-               <span>主页</span>
+               <span>{t('Home')}</span>
             </button>
-            <button 
+            <button
               onClick={() => onTabChange('settings')}
               className={`rd-titlebar-tab ${activeTab === 'settings' ? 'active' : ''}`}
             >
                <Settings size={16} style={{ marginRight: '8px' }} />
-               <span>设置</span>
+               <span>{t('Settings')}</span>
             </button>
          </div>
       </div>
 
       <div className="rd-window-controls">
          <div className="flex-row pr-[10px]">
-            <div className="rd-window-control" title="帮助"><HelpCircle size={18} /></div>
-            <div className="rd-window-control" title="账户"><User size={18} /></div>
+            <div className="rd-window-control" title={t('Help')}><HelpCircle size={18} /></div>
+            <div className="rd-window-control" title={t('Account')}><User size={18} /></div>
             <div className="relative">
-                <button 
+                <button
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
                   className={`rd-window-control ${isMenuOpen ? 'bg-black/5' : 'opacity-40 hover:opacity-100'}`}
-                  title="菜单"
+                  title={t('Menu')}
                 >
                    <Menu size={18} />
                 </button>
-                
+
                 {isMenuOpen && (
                   <div className={`rd-dropdown show`} style={{ top: '100%', right: 0, width: '180px' }}>
                      <div className="rd-menu-item" onClick={() => { setIsMenuOpen(false); }}>
-                        <span>关于 RustDesk</span>
+                        <span>{t('About RustDesk')}</span>
                      </div>
                      <div className="rd-menu-item" onClick={() => { setIsMenuOpen(false); }}>
-                        <span>检查更新</span>
+                        <span>{t('Check for Updates')}</span>
                      </div>
                      <div className="rd-menu-divider" />
                      <div className="rd-menu-item" onClick={() => { window.open('https://rustdesk.com', '_blank'); setIsMenuOpen(false); }}>
-                        <span>访问官网</span>
+                        <span>{t('Visit Website')}</span>
                      </div>
                      <div className="rd-menu-item danger" onClick={() => appWindow?.close()}>
-                        <span>退出</span>
+                        <span>{t('Exit')}</span>
                      </div>
                   </div>
                 )}
@@ -89,25 +91,25 @@ export default function TitleBar({ activeTab, onTabChange }: TitleBarProps) {
 
          <div style={{ width: '1px', height: '20px', background: 'var(--rd-border)', margin: '0 10px', alignSelf: 'center' }}></div>
 
-         <button 
+         <button
            onClick={() => appWindow?.minimize()}
            className="rd-window-control"
-           title="最小化"
+           title={t('Minimize')}
          >
             <Minus size={16} />
          </button>
-         <button 
+         <button
            onClick={() => appWindow?.toggleMaximize()}
            className="rd-window-control"
-           title="最大化"
+           title={t('Maximize')}
          >
             <Square size={13} />
          </button>
-         <button 
+         <button
            onClick={() => appWindow?.close()}
            className="rd-window-control"
            style={{ color: '#D93025' }}
-           title="关闭"
+           title={t('Close')}
          >
             <X size={18} />
          </button>

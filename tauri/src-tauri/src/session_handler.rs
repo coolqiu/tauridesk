@@ -53,11 +53,38 @@ impl TauriHandler {
 // These are all required by `Session<TauriHandler>`
 // -------------------------------------------------------------
 impl InvokeUiSession for TauriHandler {
-    fn set_cursor_data(&self, _cd: CursorData) {}
+    fn set_cursor_data(&self, cd: CursorData) {
+        // 将光标 RGBA 数据编码后发给前端，前端用来创建自定义 CSS cursor
+        use hbb_common::sodiumoxide::base64;
+        let rgba_b64 = base64::encode(&cd.colors, base64::Variant::Original);
+        #[derive(Clone, serde::Serialize)]
+        struct CursorDataPayload {
+            id: u64,
+            hotx: i32,
+            hoty: i32,
+            width: i32,
+            height: i32,
+            colors: String, // base64 encoded RGBA
+        }
+        self.emit("cursor-data", CursorDataPayload {
+            id: cd.id,
+            hotx: cd.hotx,
+            hoty: cd.hoty,
+            width: cd.width,
+            height: cd.height,
+            colors: rgba_b64,
+        });
+    }
 
-    fn set_cursor_id(&self, _id: String) {}
+    fn set_cursor_id(&self, id: String) {
+        self.emit("cursor-id", id);
+    }
 
-    fn set_cursor_position(&self, _cp: CursorPosition) {}
+    fn set_cursor_position(&self, cp: CursorPosition) {
+        #[derive(Clone, serde::Serialize)]
+        struct CursorPos { x: i32, y: i32 }
+        self.emit("cursor-position", CursorPos { x: cp.x, y: cp.y });
+    }
 
     fn set_display(&self, _x: i32, _y: i32, w: i32, h: i32, _cursor_embedded: bool, _scale: f64) {
         // Save display dimensions for WebCodecs decoder
@@ -114,7 +141,14 @@ impl InvokeUiSession for TauriHandler {
         self.is_connected.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
-    fn update_privacy_mode(&self) {}
+    fn update_privacy_mode(&self) {
+        // Note: privacy-mode boolean already tracked by remoteOptions in frontend via set_remote_option
+        // This event just notifies frontend to update the UI
+        // Since we don't have access to the Session's privacy-mode state here, emit generic event
+        #[derive(serde::Serialize, Clone)]
+        struct OptionPayload { key: String }
+        self.emit("remote-option-changed", OptionPayload { key: "privacy-mode".to_string() });
+    }
 
     fn set_permission(&self, _name: &str, _value: bool) {}
 
@@ -124,7 +158,15 @@ impl InvokeUiSession for TauriHandler {
     }
 
     fn update_quality_status(&self, qs: QualityStatus) {
-        println!("📊 [Session {}] Quality: {:?} delay={:?}", self.remote_id, qs.speed, qs.delay);
+        #[derive(serde::Serialize, Clone)]
+        struct QualityStatusPayload {
+            speed: String,
+            delay: String,
+        }
+        self.emit("quality-status", QualityStatusPayload {
+            speed: qs.speed.clone().unwrap_or_default(),
+            delay: qs.delay.map(|d| d.to_string()).unwrap_or_default(),
+        });
     }
 
     fn set_connection_type(&self, _is_secured: bool, _direct: bool, _stream_type: &str) {}
@@ -163,7 +205,11 @@ impl InvokeUiSession for TauriHandler {
         _is_identical: bool,
     ) {}
 
-    fn update_block_input_state(&self, _on: bool) {}
+    fn update_block_input_state(&self, on: bool) {
+        #[derive(serde::Serialize, Clone)]
+        struct OptionPayload { key: String, value: bool }
+        self.emit("remote-option-changed", OptionPayload { key: "block-input".to_string(), value: on });
+    }
 
     fn job_progress(&self, _id: i32, _file_num: i32, _speed: f64, _finished_size: f64) {}
 
@@ -243,8 +289,6 @@ impl InvokeUiSession for TauriHandler {
         });
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    fn clipboard(&self, _content: String) {}
 
     fn cancel_msgbox(&self, _tag: &str) {}
 
@@ -280,6 +324,10 @@ impl InvokeUiSession for TauriHandler {
     fn handle_screenshot_resp(&self, _sid: String, _msg: String) {}
 
     fn handle_terminal_response(&self, _response: TerminalResponse) {}
+
+    fn clipboard(&self, content: String) {
+        self.emit("remote-clipboard", content);
+    }
 
     fn needs_software_decoding(&self) -> bool {
         // Set to false to send encoded frames to WebCodecs in frontend
