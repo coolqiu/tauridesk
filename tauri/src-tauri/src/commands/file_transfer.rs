@@ -1,9 +1,11 @@
 // file_transfer.rs
-use crate::commands::session::ACTIVE_SESSIONS;
+use crate::commands::session::{ACTIVE_SESSIONS, FILE_TRANSFER_SESSIONS};
 use hbb_common::{fs, message_proto::*};
 use librustdesk::client::Data;
+use librustdesk::ui_session_interface::Session;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
+use crate::session_handler::TauriHandler;
 
 #[derive(Serialize, Deserialize)]
 pub struct FileEntry {
@@ -43,12 +45,7 @@ pub async fn fs_read_local_dir(path: String) -> Result<DirResult, String> {
 #[tauri::command]
 pub async fn fs_read_remote_dir(id: String, path: String) -> Result<(), String> {
     let id = id.trim().to_string();
-    let sessions = ACTIVE_SESSIONS.lock().unwrap();
-    
-    println!("🔍 [FS] Looking for session: '{}'", id);
-    println!("🔍 [FS] Currently active sessions: {:?}", sessions.keys().collect::<Vec<_>>());
-
-    if let Some(session) = sessions.get(&id) {
+    if let Some(session) = get_file_session(&id) {
         let mut msg_out = Message::new();
         let mut file_action = FileAction::new();
         let mut read_dir = ReadDir::new();
@@ -58,15 +55,12 @@ pub async fn fs_read_remote_dir(id: String, path: String) -> Result<(), String> 
         msg_out.set_file_action(file_action);
         
         if let Some(sender) = session.sender.read().unwrap().as_ref() {
-            println!("📡 [FS] Sending ReadDir request to peer {}", id);
             sender.send(Data::Message(msg_out)).map_err(|e| e.to_string())?;
             Ok(())
         } else {
-            println!("⚠️ [FS] Session sender for {} is not ready yet!", id);
             Err("Session sender not initialized".into())
         }
     } else {
-        println!("❌ [FS] Session '{}' not found in ACTIVE_SESSIONS map", id);
         Err("Session not found".into())
     }
 }
@@ -107,8 +101,7 @@ pub async fn fs_transfer_files(
     act_id: i32,
 ) -> Result<(), String> {
     let id = id.trim().to_string();
-    let sessions = ACTIVE_SESSIONS.lock().unwrap();
-    if let Some(session) = sessions.get(&id) {
+    if let Some(session) = get_file_session(&id) {
         if let Some(sender) = session.sender.read().unwrap().as_ref() {
             let mut cnt = 0;
             for f in files {
@@ -139,10 +132,7 @@ pub async fn fs_transfer_files(
 }
 
 fn send_session_data(id: &str, data: Data) -> Result<(), String> {
-    let sessions = ACTIVE_SESSIONS.lock().map_err(|e| e.to_string())?;
-    let session = sessions
-        .get(id)
-        .ok_or_else(|| "Session not found".to_string())?;
+    let session = get_file_session(id).ok_or_else(|| "Session not found".to_string())?;
     let sender = session
         .sender
         .read()
@@ -150,6 +140,19 @@ fn send_session_data(id: &str, data: Data) -> Result<(), String> {
         .clone()
         .ok_or_else(|| "Session sender not found".to_string())?;
     sender.send(data).map_err(|e| e.to_string())
+}
+
+fn get_file_session(id: &str) -> Option<Session<TauriHandler>> {
+    FILE_TRANSFER_SESSIONS
+        .lock()
+        .ok()
+        .and_then(|sessions| sessions.get(id).cloned())
+        .or_else(|| {
+            ACTIVE_SESSIONS
+                .lock()
+                .ok()
+                .and_then(|sessions| sessions.get(id).cloned())
+        })
 }
 
 #[tauri::command]

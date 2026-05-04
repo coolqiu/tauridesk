@@ -44,6 +44,8 @@ export default function RemotePanel() {
     try {
       const connected = await invoke<boolean>('is_session_connected', { id: targetId });
       if (connected) {
+        const connToken = await invoke<string | null>('get_session_conn_token', { id: targetId }).catch(() => null);
+        await invoke('fs_connect', { id: targetId, password: null, connToken });
         await invoke('open_file_transfer_window', { id: targetId });
       } else {
         setAuthTargetId(targetId);
@@ -56,7 +58,7 @@ export default function RemotePanel() {
   };
 
   const confirmAuth = async (password: string) => {
-    await invoke('fs_connect', { id: authTargetId, password });
+    await invoke('fs_connect', { id: authTargetId, password, connToken: null });
     await invoke('open_file_transfer_window', { id: authTargetId });
     setShowAuthModal(false);
   };

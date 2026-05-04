@@ -15,15 +15,22 @@ pub struct BrowserCodecs {
     av1: bool,
 }
 
+fn tauri_safe_codecs(mut codecs: BrowserCodecs) -> BrowserCodecs {
+    // Tauri renders through WebCodecs. HEVC/H265 support in WebView2 is not reliable:
+    // it may be reported as supported while decode output never arrives. Do not
+    // advertise it to the controlled side unless we later add a real sample decode probe.
+    codecs.h265 = false;
+    codecs
+}
+
 #[tauri::command]
 pub async fn set_browser_supported_codecs(vp8: bool, vp9: bool, h264: bool, h265: bool, av1: bool) -> Result<(), String> {
+    let codecs = tauri_safe_codecs(BrowserCodecs { vp8, vp9, h264, h265, av1 });
     // 1. Persist to status
     let codec_json = serde_json::json!({
-        "vp8": vp8, "vp9": vp9, "h264": h264, "h265": h265, "av1": av1,
+        "vp8": codecs.vp8, "vp9": codecs.vp9, "h264": codecs.h264, "h265": codecs.h265, "av1": codecs.av1,
     }).to_string();
     Status::set("browser-supported-codecs", codec_json);
-
-    let codecs = BrowserCodecs { vp8, vp9, h264, h265, av1 };
 
     // 2. Update all active sessions
     let sessions = ACTIVE_SESSIONS.lock().unwrap();
@@ -45,6 +52,7 @@ pub fn apply_cached_browser_supported_codecs(id: &str, session: &Session<TauriHa
     let Ok(codecs) = serde_json::from_str::<BrowserCodecs>(&cached) else {
         return;
     };
+    let codecs = tauri_safe_codecs(codecs);
     apply_browser_supported_codecs(session, codecs);
     notify_supported_decoding(session, codecs);
     request_refresh_video(id, 0);

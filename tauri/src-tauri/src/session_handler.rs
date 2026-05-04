@@ -54,9 +54,11 @@ impl TauriHandler {
 // -------------------------------------------------------------
 impl InvokeUiSession for TauriHandler {
     fn set_cursor_data(&self, cd: CursorData) {
-        // 将光标 RGBA 数据编码后发给前端，前端用来创建自定义 CSS cursor
+        // CursorData.colors is compressed in the RustDesk protocol. Match Flutter's bridge:
+        // decompress first, then hand the raw RGBA pixels to the web layer.
+        let colors = hbb_common::compress::decompress(&cd.colors);
         use hbb_common::sodiumoxide::base64;
-        let rgba_b64 = base64::encode(&cd.colors, base64::Variant::Original);
+        let rgba_b64 = base64::encode(&colors, base64::Variant::Original);
         #[derive(Clone, serde::Serialize)]
         struct CursorDataPayload {
             id: u64,

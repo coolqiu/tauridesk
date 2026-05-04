@@ -129,6 +129,28 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
   };
 
   useEffect(() => {
+    if (!activeMenu) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (toolbarRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      closeMenus();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenus();
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [activeMenu]);
+
+  useEffect(() => {
     const handleMouseTop = (e: MouseEvent) => {
       if (isPinned) return;
       if (e.clientY < 10) setIsVisible(true);
@@ -151,6 +173,16 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
     });
   };
 
+  const openFileTransfer = async () => {
+    try {
+      const connToken = await invoke<string | null>('get_session_conn_token', { id }).catch(() => null);
+      await invoke('fs_connect', { id, password: null, connToken });
+      await invoke('open_file_transfer_window', { id });
+    } catch (e) {
+      console.error('Failed to open file transfer:', e);
+    }
+  };
+
   const menuItems = {
     display: [
       { label: t('Scale: Contain'), active: viewMode === 'contain', onClick: () => onViewModeChange('contain'), icon: <Scaling size={14}/> },
@@ -166,7 +198,18 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
       })),
       { divider: true },
       { label: t('Refresh'), onClick: () => invoke('refresh_video', { id }), icon: <RefreshCcw size={14}/> },
-      { label: t('Show Remote Cursor'), active: showRemoteCursor, onClick: () => setShowRemoteCursor(!showRemoteCursor), icon: <MousePointer2 size={14}/>, isToggle: true },
+      {
+        label: t('Show Remote Cursor'),
+        active: showRemoteCursor,
+        onClick: () => {
+          const next = !showRemoteCursor;
+          setShowRemoteCursor(next);
+          invoke('set_remote_option', { id, key: 'show-remote-cursor', value: next ? 'Y' : 'N' })
+            .catch(() => setShowRemoteCursor(!next));
+        },
+        icon: <MousePointer2 size={14}/>,
+        isToggle: true
+      },
       { label: t('Session Quality'), onClick: onShowQualityPanel, icon: <Activity size={14}/> },
     ],
     input: [
@@ -268,7 +311,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
             <button className="toolbar-btn" title={t('Fullscreen')} onClick={toggleFullscreen}>
               {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
-            <button className="toolbar-btn" title={t('File Transfer')} onClick={() => invoke('open_file_transfer_window', { id })}>
+            <button className="toolbar-btn" title={t('File Transfer')} onClick={openFileTransfer}>
               <FileText size={16} />
             </button>
           </div>
@@ -305,6 +348,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
                 border: '1px solid #333',
                 minWidth: '180px'
             }}
+            onPointerDown={e => e.stopPropagation()}
             onClick={closeMenus}
         >
             {menuItems[activeMenu as keyof typeof menuItems]?.map((item: any, idx) => (

@@ -1,10 +1,12 @@
 // hooks/useFilePanel.ts
-import { useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { FilePanelState, FileSide } from '../types';
 
 export function useFilePanel(side: FileSide, peerId?: string) {
+  const remoteRequestSeq = useRef(0);
+  const remoteTimeoutRef = useRef<number | null>(null);
   const [state, setState] = useState<FilePanelState>({
     path: '',
     history: [],
@@ -27,7 +29,22 @@ export function useFilePanel(side: FileSide, peerId?: string) {
           selection: new Set(),
         }));
       } else {
-        if (!peerId) return;
+        if (!peerId) {
+          setState(s => ({ ...s, loading: false, error: '缺少远程设备 ID。' }));
+          return;
+        }
+        const requestSeq = ++remoteRequestSeq.current;
+        if (remoteTimeoutRef.current !== null) {
+          window.clearTimeout(remoteTimeoutRef.current);
+        }
+        remoteTimeoutRef.current = window.setTimeout(() => {
+          if (remoteRequestSeq.current !== requestSeq) return;
+          setState(s => ({
+            ...s,
+            loading: false,
+            error: '远程目录加载超时，请确认文件传输连接已建立并重试。',
+          }));
+        }, 8000);
         // Small delay for initial remote load to ensure session is ready
         if (path === '') {
            await new Promise(r => setTimeout(r, 800));
@@ -39,6 +56,10 @@ export function useFilePanel(side: FileSide, peerId?: string) {
       }
     } catch (e: any) {
       console.error(`Failed to load ${side} dir:`, e);
+      if (remoteTimeoutRef.current !== null) {
+        window.clearTimeout(remoteTimeoutRef.current);
+        remoteTimeoutRef.current = null;
+      }
       setState(s => ({ ...s, loading: false, error: e.toString() }));
     }
   }, [side, peerId]);
@@ -94,6 +115,11 @@ export function useFilePanel(side: FileSide, peerId?: string) {
           if (payload.id && payload.id !== peerId) return;
           
           console.log(`📥 [Frontend] UI Update for ${peerId}:`, payload.path);
+          remoteRequestSeq.current += 1;
+          if (remoteTimeoutRef.current !== null) {
+            window.clearTimeout(remoteTimeoutRef.current);
+            remoteTimeoutRef.current = null;
+          }
           setState(s => ({
             ...s,
             path: payload.path,
@@ -116,6 +142,10 @@ export function useFilePanel(side: FileSide, peerId?: string) {
 
     return () => {
       disposed = true;
+      if (remoteTimeoutRef.current !== null) {
+        window.clearTimeout(remoteTimeoutRef.current);
+        remoteTimeoutRef.current = null;
+      }
       if (unlistenFn) unlistenFn();
     };
   }, [side, peerId]);

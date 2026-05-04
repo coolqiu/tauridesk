@@ -20,6 +20,8 @@ use librustdesk::client::Data;
 lazy_static! {
     pub static ref ACTIVE_SESSIONS: Arc<Mutex<HashMap<String, Session<TauriHandler>>>> = Arc::new(Mutex::new(HashMap::new()));
     pub static ref SESSION_SENDERS: Arc<Mutex<HashMap<String, UnboundedSender<Data>>>> = Arc::new(Mutex::new(HashMap::new()));
+    pub static ref FILE_TRANSFER_SESSIONS: Arc<Mutex<HashMap<String, Session<TauriHandler>>>> = Arc::new(Mutex::new(HashMap::new()));
+    pub static ref FILE_TRANSFER_SENDERS: Arc<Mutex<HashMap<String, UnboundedSender<Data>>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
 #[tauri::command]

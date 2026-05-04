@@ -184,6 +184,7 @@ pub fn run() {
             commands::system::get_version,
             commands::session::connect_to_peer,
             commands::session::fs_connect,
+            commands::session::get_session_conn_token,
             commands::session::submit_password,
             commands::session::is_session_connected,
             commands::session::listen_video_stream,

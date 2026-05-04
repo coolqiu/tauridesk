@@ -10,6 +10,20 @@ import '../index.css';
 // Check if WebCodecs is supported at module level
 const isWebCodecsSupported = typeof VideoDecoder !== 'undefined' && typeof VideoDecoder.isConfigSupported !== 'undefined';
 type QualityMode = 'smooth' | 'balanced' | 'quality';
+type CursorImageCache = {
+  url: string;
+  hotx: number;
+  hoty: number;
+  width: number;
+  height: number;
+};
+type BrowserCodecs = {
+  vp8: boolean;
+  vp9: boolean;
+  h264: boolean;
+  h265: boolean;
+  av1: boolean;
+};
 
 const readQualityMode = (): QualityMode => {
   const saved = localStorage.getItem('rustdesk-quality-mode');
@@ -28,6 +42,7 @@ export default function SessionWindow() {
   const [displays, setDisplays] = useState<any[]>([]);
   const [currentDisplay, setCurrentDisplay] = useState<number>(0);
   const [showRemoteCursor, setShowRemoteCursor] = useState<boolean>(true);
+  const [remoteCursorReady, setRemoteCursorReady] = useState<boolean>(false);
   const showRemoteCursorRef = useRef(true);
   const viewModeRef = useRef<'contain' | 'cover' | 'original'>('contain');
   const [qualityMode, setQualityMode] = useState<QualityMode>(readQualityMode);
@@ -43,6 +58,16 @@ export default function SessionWindow() {
     speed: '-',
     delay: '-',
     codec: ''
+  });
+  const [cursorStats, setCursorStats] = useState({
+    pos: 0,
+    ids: 0,
+    data: 0,
+    ready: false,
+    size: '-',
+    bytes: '-',
+    alpha: '-',
+    status: 'waiting',
   });
   const [remoteOptions, setRemoteOptions] = useState<Record<string, boolean>>({
     'block-input': false,
@@ -71,13 +96,18 @@ export default function SessionWindow() {
   const statusRef = useRef<string>('Initializing...');
   const lastPtsRef = useRef(BigInt(0));
   const currentCodecRef = useRef<string | null>(null);
+  const receivedCodecRef = useRef<string | null>(null);
+  const browserCodecsRef = useRef<BrowserCodecs | null>(null);
+  const failedCodecsRef = useRef<Set<string>>(new Set());
+  const lastDecodeOutputAtRef = useRef(0);
+  const lastCodecFallbackAtRef = useRef(0);
   const isInitializingRef = useRef<boolean>(false);
 
   // 远端光标状态
   const cursorXRef = useRef(0);
   const cursorYRef = useRef(0);
   const cursorDivRef = useRef<HTMLDivElement | null>(null);
-  const cursorImageCacheRef = useRef<Map<string, string>>(new Map()); // cursorId -> dataURI
+  const cursorImageCacheRef = useRef<Map<string, CursorImageCache>>(new Map());
   const currentCursorIdRef = useRef<string>('');
 
   const updateStatus = (next: string) => {
@@ -95,12 +125,82 @@ export default function SessionWindow() {
     return canvasCtxRef.current;
   };
 
+  const moveCursorOverlayToPointer = (event: React.MouseEvent | React.WheelEvent) => {
+    if (!showRemoteCursorRef.current || !cursorDivRef.current || !remoteCursorReady) return;
+    cursorDivRef.current.style.left = `${event.clientX}px`;
+    cursorDivRef.current.style.top = `${event.clientY}px`;
+    cursorDivRef.current.style.display = 'block';
+  };
+
+  const getRemoteViewport = () => {
+    const canvas = canvasRef.current;
+    const { width, height } = lastDimensionsRef.current;
+    if (!canvas || !width || !height) return null;
+    const rect = canvas.getBoundingClientRect();
+    const mode = viewModeRef.current;
+    if (mode === 'original') {
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, scaleX: rect.width / width, scaleY: rect.height / height };
+    }
+
+    const scale = mode === 'cover'
+      ? Math.max(rect.width / width, rect.height / height)
+      : Math.min(rect.width / width, rect.height / height);
+    const displayWidth = width * scale;
+    const displayHeight = height * scale;
+    return {
+      left: rect.left + (rect.width - displayWidth) / 2,
+      top: rect.top + (rect.height - displayHeight) / 2,
+      width: displayWidth,
+      height: displayHeight,
+      scaleX: scale,
+      scaleY: scale,
+    };
+  };
+
+  const sendBrowserCodecs = async (codecs: BrowserCodecs) => {
+    if (!id) return;
+    browserCodecsRef.current = codecs;
+    await invoke('set_browser_supported_codecs', codecs);
+  };
+
+  const markCodecUnsupportedAndRenegotiate = (format: string, reason = 'decode failed') => {
+    const codecs = browserCodecsRef.current;
+    if (!codecs || !id) return;
+    const normalized = format.toUpperCase();
+    if (normalized === 'VP8') {
+      updateStatus(`WebCodecs stalled on VP8`);
+      return;
+    }
+    if (failedCodecsRef.current.has(normalized)) return;
+
+    const next = { ...codecs };
+    if (normalized === 'H265') next.h265 = false;
+    else if (normalized === 'H264') next.h264 = false;
+    else if (normalized === 'VP9') next.vp9 = false;
+    else if (normalized === 'AV1') next.av1 = false;
+    else return;
+
+    if (JSON.stringify(next) === JSON.stringify(codecs)) return;
+    failedCodecsRef.current.add(normalized);
+    browserCodecsRef.current = next;
+    currentCodecRef.current = null;
+    needsKeyFrameRef.current = true;
+    updateStatus(`Renegotiating codec (${format}: ${reason})`);
+    invoke('set_browser_supported_codecs', next)
+      .then(() => invoke('refresh_video', { id }))
+      .catch(err => console.error('❌ Failed to renegotiate codec:', err));
+  };
+
   useEffect(() => {
     qualityModeRef.current = qualityMode;
     localStorage.setItem('rustdesk-quality-mode', qualityMode);
   }, [qualityMode]);
 
   useEffect(() => {
+      setRemoteCursorReady(false);
+      lastDecodeOutputAtRef.current = 0;
+      lastCodecFallbackAtRef.current = 0;
+      failedCodecsRef.current.clear();
     // Detect which codecs are supported by this browser via WebCodecs and inform Rust
     const detectAndSendCodecSupport = async () => {
       const testCodec = async (codecStr: string): Promise<boolean> => {
@@ -128,10 +228,11 @@ export default function SessionWindow() {
         if (await testCodec(variation)) { h264Supported = true; break; }
       }
 
-      let h265Supported = false;
-      for (const variation of ['hev1.1.6.L123.B0', 'hev1.1.6.L120.B0', 'hvc1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'h265', 'hevc']) {
-        if (await testCodec(variation)) { h265Supported = true; break; }
-      }
+      // Chromium/WebView2 HEVC WebCodecs support is platform/driver/licensing dependent
+      // and can report support while still failing to produce frames. RustDesk Tauri
+      // uses WebCodecs directly, so keep H265 out of negotiation until we add a
+      // real decode probe with sample Annex-B data.
+      const h265Supported = false;
 
       // AV1 can be supported by WebCodecs but still be a poor default for
       // interactive remote control. Prefer H264/VPx until codec preference UI
@@ -154,8 +255,8 @@ export default function SessionWindow() {
 
       if (id && !codecSupportSentRef.current) {
         codecSupportSentRef.current = true;
-
-        invoke('set_browser_supported_codecs', {
+        failedCodecsRef.current.clear();
+        sendBrowserCodecs({
           vp8: vp8Supported,
           vp9: vp9Supported,
           h264: h264Supported,
@@ -229,6 +330,7 @@ export default function SessionWindow() {
 
         if (!foundConfig) {
           console.error(`❌ [WebCodecs] No supported configuration found for ${format}`);
+          markCodecUnsupportedAndRenegotiate(format);
           isInitializingRef.current = false;
           return;
         }
@@ -257,6 +359,7 @@ export default function SessionWindow() {
 
             ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
             frame.close();
+            lastDecodeOutputAtRef.current = Date.now();
             renderFrameCountRef.current++;
             autoCloseOnFrame();
             
@@ -271,6 +374,7 @@ export default function SessionWindow() {
               .map(b => b.toString(16).padStart(2, '0')).join(' ');
             console.error(`❌ WebCodecs 拒绝解码！原因: ${e.message} | 数据指纹: ${hex}`);
             updateStatus(`WebCodecs Error: ${e.message}`);
+            markCodecUnsupportedAndRenegotiate(format);
 
             // If hardware acceleration fails, force re-init with software fallback
             if (decoderRef.current) {
@@ -326,6 +430,7 @@ export default function SessionWindow() {
         }
       }
       ctx.putImageData(imgData, 0, 0);
+      lastDecodeOutputAtRef.current = Date.now();
       renderFrameCountRef.current++;
       autoCloseOnFrame();
       updateStatus('Software Rendering');
@@ -367,7 +472,9 @@ export default function SessionWindow() {
 
       const codec = CODEC_MAP[typeByte];
       if (!codec || !isWebCodecsSupportedRef.current) return;
+      receivedCodecRef.current = codec;
       recvFrameCountRef.current++;
+      if (lastDecodeOutputAtRef.current === 0) lastDecodeOutputAtRef.current = Date.now();
 
       const isKey = view.getUint8(1) === 1;
       let timestamp = view.getBigInt64(2, true);
@@ -464,8 +571,10 @@ export default function SessionWindow() {
     };
 
     if (id) {
+      invoke('set_remote_option', { id, key: 'show-remote-cursor', value: showRemoteCursorRef.current ? 'Y' : 'N' }).catch(() => { });
       invoke('force_clear_video_channels', { id })
         .then(() => invoke('listen_video_stream', { id, channel: videoChannel }))
+        .then(() => browserCodecsRef.current ? sendBrowserCodecs(browserCodecsRef.current) : undefined)
         .then(() => invoke('refresh_video', { id }))
         .catch(console.error);
     }
@@ -497,14 +606,11 @@ export default function SessionWindow() {
     // 📍 远端光标渲染事件监听
     const unlistenCursorPos = listen('cursor-position', (event: any) => {
       const { x, y } = event.payload;
-      const canvas = canvasRef.current;
-      if (!canvas || !lastDimensionsRef.current.width) return;
-      const rect = canvas.getBoundingClientRect();
-      // 将远端坐标映射到本地 canvas 展示坐标
-      const scaleX = rect.width / lastDimensionsRef.current.width;
-      const scaleY = rect.height / lastDimensionsRef.current.height;
-      cursorXRef.current = rect.left + x * scaleX;
-      cursorYRef.current = rect.top + y * scaleY;
+      setCursorStats(prev => ({ ...prev, pos: prev.pos + 1 }));
+      const viewport = getRemoteViewport();
+      if (!viewport) return;
+      cursorXRef.current = viewport.left + x * viewport.scaleX;
+      cursorYRef.current = viewport.top + y * viewport.scaleY;
       if (!cursorDivRef.current) return;
       if (!showRemoteCursorRef.current) {
         cursorDivRef.current.style.display = 'none';
@@ -517,10 +623,18 @@ export default function SessionWindow() {
 
     const unlistenCursorId = listen('cursor-id', (event: any) => {
       const newId = String(event.payload);
+      setCursorStats(prev => ({ ...prev, ids: prev.ids + 1 }));
       currentCursorIdRef.current = newId;
       const cached = cursorImageCacheRef.current.get(newId);
       if (cached && cursorDivRef.current && showRemoteCursorRef.current) {
-        cursorDivRef.current.style.backgroundImage = `url(${cached})`;
+        setRemoteCursorReady(true);
+        setCursorStats(prev => ({ ...prev, ready: true, status: 'id cached' }));
+        cursorDivRef.current.style.backgroundImage = `url(${cached.url})`;
+        cursorDivRef.current.style.backgroundSize = `${cached.width}px ${cached.height}px`;
+        cursorDivRef.current.style.width = `${cached.width}px`;
+        cursorDivRef.current.style.height = `${cached.height}px`;
+        cursorDivRef.current.style.marginLeft = `${-cached.hotx}px`;
+        cursorDivRef.current.style.marginTop = `${-cached.hoty}px`;
       }
     });
 
@@ -531,6 +645,25 @@ export default function SessionWindow() {
         const binaryStr = atob(colors);
         const bytes = new Uint8ClampedArray(binaryStr.length);
         for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const expectedBytes = Number(width) * Number(height) * 4;
+        let alphaPixels = 0;
+        for (let i = 3; i < bytes.length; i += 4) {
+          if (bytes[i] !== 0) alphaPixels++;
+        }
+        setCursorStats(prev => ({
+          ...prev,
+          data: prev.data + 1,
+          size: `${width}x${height}`,
+          bytes: `${bytes.length}/${expectedBytes}`,
+          alpha: `${alphaPixels}`,
+          status: bytes.length === expectedBytes && alphaPixels > 0 ? 'data ok' : 'bad data',
+        }));
+        if (bytes.length !== expectedBytes) {
+          throw new Error(`cursor rgba length mismatch: ${bytes.length}/${expectedBytes}`);
+        }
+        if (alphaPixels === 0) {
+          throw new Error(`cursor rgba is fully transparent: ${width}x${height}`);
+        }
         const offscreen = new OffscreenCanvas(width, height);
         const ctx2 = offscreen.getContext('2d')!;
         const imgData = new ImageData(bytes, width, height);
@@ -538,8 +671,16 @@ export default function SessionWindow() {
         offscreen.convertToBlob().then(blob => {
           const dataUri = URL.createObjectURL(blob);
           const cursorId = String(id);
-          cursorImageCacheRef.current.set(cursorId, dataUri);
+          const previous = cursorImageCacheRef.current.get(cursorId);
+          if (previous) URL.revokeObjectURL(previous.url);
+          cursorImageCacheRef.current.set(cursorId, { url: dataUri, hotx, hoty, width, height });
+          // RustDesk sends CursorData when the cursor shape changes; it may not send
+          // a separate CursorId for that same transition. Treat data itself as the
+          // active cursor resource so resize/drag/text cursors switch immediately.
+          currentCursorIdRef.current = cursorId;
           if (currentCursorIdRef.current === cursorId && cursorDivRef.current) {
+            setRemoteCursorReady(true);
+            setCursorStats(prev => ({ ...prev, ready: true, status: 'image ready' }));
             cursorDivRef.current.style.backgroundImage = `url(${dataUri})`;
             cursorDivRef.current.style.backgroundSize = `${width}px ${height}px`;
             cursorDivRef.current.style.width = `${width}px`;
@@ -549,6 +690,7 @@ export default function SessionWindow() {
           }
         });
       } catch (e) {
+        setCursorStats(prev => ({ ...prev, ready: false, status: e instanceof Error ? e.message : 'render failed' }));
         console.error('❌ [Cursor] Failed to render cursor image:', e);
       }
     });
@@ -587,6 +729,20 @@ export default function SessionWindow() {
       const currentRecvCount = recvFrameCountRef.current;
       const currentKeyCount = keyFrameCountRef.current;
       const currentRenderCount = renderFrameCountRef.current;
+      const codecForWatchdog = currentCodecRef.current || receivedCodecRef.current;
+      const now = Date.now();
+      if (
+        id &&
+        codecForWatchdog &&
+        currentKeyCount > 0 &&
+        currentRecvCount > 0 &&
+        currentRenderCount === 0 &&
+        now - lastDecodeOutputAtRef.current > 2000 &&
+        now - lastCodecFallbackAtRef.current > 3000
+      ) {
+        lastCodecFallbackAtRef.current = now;
+        markCodecUnsupportedAndRenegotiate(codecForWatchdog, 'no decoded output');
+      }
       const decodeFps = currentCount - lastLoggedFrameCountRef.current;
       const recvFps = currentRecvCount - lastRecvFrameCountRef.current;
       const keyFps = currentKeyCount - lastKeyFrameCountRef.current;
@@ -604,7 +760,7 @@ export default function SessionWindow() {
         renderFps,
         dropFps,
         keyFps,
-        codec: currentCodecRef.current || 'None'
+        codec: currentCodecRef.current || receivedCodecRef.current || 'None'
       }));
       droppedFrameCountRef.current = 0;
     }, 1000);
@@ -634,7 +790,7 @@ export default function SessionWindow() {
       }
       canvasCtxRef.current = null;
       // 清理光标 blob URL 缓存
-      cursorImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
+      cursorImageCacheRef.current.forEach(cursor => URL.revokeObjectURL(cursor.url));
       cursorImageCacheRef.current.clear();
       decoderRef.current = null;
     };
@@ -666,12 +822,15 @@ export default function SessionWindow() {
   };
 
   const getCoords = (event: React.MouseEvent | React.WheelEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !lastDimensionsRef.current.width) return null;
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.round((event.clientX - rect.left) * (lastDimensionsRef.current.width / rect.width));
-    const y = Math.round((event.clientY - rect.top) * (lastDimensionsRef.current.height / rect.height));
-    return { x, y };
+    const viewport = getRemoteViewport();
+    const { width, height } = lastDimensionsRef.current;
+    if (!viewport || !width || !height) return null;
+    const x = Math.round((event.clientX - viewport.left) / viewport.scaleX);
+    const y = Math.round((event.clientY - viewport.top) / viewport.scaleY);
+    return {
+      x: Math.max(0, Math.min(width - 1, x)),
+      y: Math.max(0, Math.min(height - 1, y)),
+    };
   };
 
   return (
@@ -771,6 +930,18 @@ export default function SessionWindow() {
               <span className="rd-perf-label">{t('Delay')}:</span>
               <span className="rd-perf-value">{perfStats.delay}</span>
             </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">Cursor:</span>
+              <span className="rd-perf-value">{cursorStats.ready ? 'READY' : cursorStats.status}</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">Cur In:</span>
+              <span className="rd-perf-value">P{cursorStats.pos}/I{cursorStats.ids}/D{cursorStats.data}</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">Cur Img:</span>
+              <span className="rd-perf-value">{cursorStats.size} {cursorStats.bytes} A:{cursorStats.alpha}</span>
+            </div>
           </div>
         )}
 
@@ -802,13 +973,13 @@ export default function SessionWindow() {
             width: viewMode === 'original' ? (lastDimensionsRef.current.width ? `${lastDimensionsRef.current.width}px` : '100%') : '100%',
             height: viewMode === 'original' ? (lastDimensionsRef.current.height ? `${lastDimensionsRef.current.height}px` : '100%') : '100%',
             objectFit: viewMode === 'contain' ? 'contain' : (viewMode === 'cover' ? 'cover' : 'none'),
-            cursor: 'none',
+            cursor: showRemoteCursor && remoteCursorReady ? 'none' : 'default',
             display: decoderRef.current ? 'block' : 'none'
           }}
-          onMouseDown={e => { canvasRef.current?.focus(); const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
-          onMouseUp={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
-          onMouseMove={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_move', { id, ...c }); }}
-          onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, deltaX: Math.round(e.deltaX), deltaY: Math.round(e.deltaY) }); }}
+          onMouseDown={e => { moveCursorOverlayToPointer(e); canvasRef.current?.focus(); const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
+          onMouseUp={e => { moveCursorOverlayToPointer(e); const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
+          onMouseMove={e => { moveCursorOverlayToPointer(e); const c = getCoords(e); if (c && id) invoke('send_mouse_move', { id, ...c }); }}
+          onWheel={e => { moveCursorOverlayToPointer(e); const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, deltaX: Math.round(e.deltaX), deltaY: Math.round(e.deltaY) }); }}
           onContextMenu={e => e.preventDefault()}
           tabIndex={0}
           onKeyDown={e => {
