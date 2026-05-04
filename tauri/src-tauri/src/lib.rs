@@ -7,13 +7,6 @@ use tauri::{Manager, Emitter, WebviewWindowBuilder};
 use std::sync::{Mutex};
 use std::collections::HashMap;
 
-#[derive(Clone, serde::Serialize)]
-struct IncomingConnPayload {
-    id: i32,
-    peer_id: String,
-    name: String,
-}
-
 type VideoChannelMap = HashMap<String, (tauri::ipc::Channel, u64)>;
 
 lazy_static::lazy_static! {

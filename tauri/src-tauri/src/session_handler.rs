@@ -92,7 +92,7 @@ impl InvokeUiSession for TauriHandler {
         let mut height = self.display_height.lock().unwrap();
         *width = Some(w as u32);
         *height = Some(h as u32);
-        println!("📺 [Session {}] set_display: {}x{}", self.remote_id, w, h);
+        log::debug!("[Session {}] set_display: {}x{}", self.remote_id, w, h);
 
         // Send display dimensions to frontend for WebCodecs decoder init
         #[derive(Clone, serde::Serialize)]
@@ -107,7 +107,7 @@ impl InvokeUiSession for TauriHandler {
     }
 
     fn switch_display(&self, display: &SwitchDisplay) {
-        println!("🖥️ [Tauri Handler] PEER switched display to: {}", display.display);
+        log::debug!("[Tauri Handler] Peer switched display to: {}", display.display);
         self.emit("current-display-changed", display.display);
     }
 
@@ -130,14 +130,14 @@ impl InvokeUiSession for TauriHandler {
             cursor_embedded: d.cursor_embedded,
         }).collect();
 
-        println!("🖥️ [Tauri Handler] DISPLAYS UPDATED: count={}", payload.len());
+        log::debug!("[Tauri Handler] Displays updated: count={}", payload.len());
         self.emit("displays-updated", payload);
     }
 
     fn set_platform_additions(&self, _data: &str) {}
 
     fn on_connected(&self, conn_type: ConnType) {
-        println!("🔗 [Session {}] Connected via {:?}", self.remote_id, conn_type);
+        log::info!("[Session {}] Connected via {:?}", self.remote_id, conn_type);
         self.is_connected.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
@@ -153,7 +153,7 @@ impl InvokeUiSession for TauriHandler {
     fn set_permission(&self, _name: &str, _value: bool) {}
 
     fn close_success(&self) {
-        println!("✅ [Session {}] close_success", self.remote_id);
+        log::debug!("[Session {}] close_success", self.remote_id);
         self.is_connected.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
@@ -247,7 +247,7 @@ impl InvokeUiSession for TauriHandler {
             }
         }).collect();
 
-        println!("📂 [Tauri Handler] Folder files updated: id={}, '{}' ({} entries) for peer {}", _id, path, tauri_entries.len(), self.remote_id);
+        log::debug!("[Tauri Handler] Folder files updated: id={}, '{}' ({} entries) for peer {}", _id, path, tauri_entries.len(), self.remote_id);
 
         let payload = DirResultPayload {
             id: self.remote_id.clone(),
@@ -324,7 +324,7 @@ impl InvokeUiSession for TauriHandler {
         
         let count = RGBA_COUNT.fetch_add(1, Ordering::SeqCst) + 1;
         if count % 60 == 1 {
-            println!("🖼️ [Tauri Handler] RGBA RECEIVED: #{} ({}x{}), size={}", count, rgba.w, rgba.h, rgba.raw.len());
+            log::trace!("[Tauri Handler] RGBA received: #{} ({}x{}), size={}", count, rgba.w, rgba.h, rgba.raw.len());
         }
 
         // Try to send via high-performance binary Channel if registered
@@ -352,7 +352,7 @@ impl InvokeUiSession for TauriHandler {
             
             // Auto-Pruning with Nonce logging
             if failed_to_send {
-                println!("🧹 [Stream] Pruning STALE channel (Nonce v{}) for peer: '{}'", _nonce_version, clean_id);
+                log::debug!("[Stream] Pruning stale channel (nonce v{}) for peer: '{}'", _nonce_version, clean_id);
                 channels.remove(&clean_id);
             }
         }
@@ -374,7 +374,7 @@ impl InvokeUiSession for TauriHandler {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, _link: &str, _retry: bool) {
-        println!("💬 [Session {}] MSGBOX: [{}] ({}) {}", self.remote_id, msgtype, title, text);
+        log::debug!("[Session {}] MSGBOX: [{}] ({}) {}", self.remote_id, msgtype, title, text);
         
         #[derive(serde::Serialize, Clone)]
         struct MsgPayload {
@@ -413,7 +413,7 @@ impl InvokeUiSession for TauriHandler {
     fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
 
     fn set_current_display(&self, disp_idx: i32) {
-        println!("🖥️ [Tauri Handler] Current display changed to: {}", disp_idx);
+        log::debug!("[Tauri Handler] Current display changed to: {}", disp_idx);
         self.emit("current-display-changed", disp_idx);
     }
 
@@ -444,7 +444,7 @@ impl InvokeUiSession for TauriHandler {
         
         let count = FRAME_COUNT.fetch_add(1, Ordering::SeqCst) + 1;
         if count % 60 == 1 {
-            println!("🗾 [WebCodecs] Encoded frame #{}: {:?}, size={}, key={}",
+            log::trace!("[WebCodecs] Encoded frame #{}: {:?}, size={}, key={}",
                 count, format, frame.data.len(), frame.key);
         }
 
@@ -465,7 +465,7 @@ impl InvokeUiSession for TauriHandler {
                 if format_byte == 255 { return; }
 
                 if count % 60 == 1 {
-                    println!("🗾 [WebCodecs] Dispatching frame to JS channel (v{}) for {}: format={}, key={}", _nonce, clean_id, format_byte, frame.key);
+                    log::trace!("[WebCodecs] Dispatching frame to JS channel (v{}) for {}: format={}, key={}", _nonce, clean_id, format_byte, frame.key);
                 }
 
                 let mut binary = Vec::with_capacity(10 + frame.data.len());
@@ -481,7 +481,7 @@ impl InvokeUiSession for TauriHandler {
             
             // Auto-Pruning: Remove stale channel if send failed (e.g. page was reloaded)
             if failed_to_send {
-                println!("🧹 [WebCodecs] Pruning STALE channel for peer: '{}'", clean_id);
+                log::debug!("[WebCodecs] Pruning stale channel for peer: '{}'", clean_id);
                 channels.remove(&clean_id);
             }
         }

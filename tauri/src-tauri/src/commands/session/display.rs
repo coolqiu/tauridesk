@@ -1,6 +1,8 @@
 use crate::commands::session::SESSION_SENDERS;
+use crate::commands::session::codecs::request_refresh_video;
 use librustdesk::client::Data;
 use hbb_common::message_proto::*;
+use hbb_common::log;
 use tauri::ipc::Channel;
 
 #[tauri::command]
@@ -32,10 +34,12 @@ pub async fn listen_video_stream(id: String, channel: Channel) -> Result<(), Str
     static NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let nonce = NONCE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     
-    println!("📺 [Tauri Command] Binding video stream for {} (nonce: {})", id, nonce);
+    log::debug!("[Tauri Command] Binding video stream for {} (nonce: {})", id, nonce);
     if let Ok(mut channels) = crate::VIDEO_CHANNELS.lock() {
-        channels.insert(id, (channel, nonce));
+        channels.insert(id.clone(), (channel, nonce));
     }
+    request_refresh_video(&id, 0);
+    request_refresh_video(&id, 150);
     Ok(())
 }
 

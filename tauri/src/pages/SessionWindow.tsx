@@ -39,6 +39,7 @@ export default function SessionWindow() {
     decodeFps: 0,
     renderFps: 0,
     dropFps: 0,
+    keyFps: 0,
     speed: '-',
     delay: '-',
     codec: ''
@@ -60,10 +61,13 @@ export default function SessionWindow() {
   const lastChunkRef = useRef<Uint8Array | null>(null);
   const frameCountRef = useRef(0);
   const recvFrameCountRef = useRef(0);
+  const keyFrameCountRef = useRef(0);
   const renderFrameCountRef = useRef(0);
   const droppedFrameCountRef = useRef(0);
   const lastRecvFrameCountRef = useRef(0);
+  const lastKeyFrameCountRef = useRef(0);
   const lastRenderFrameCountRef = useRef(0);
+  const lastKeyFrameRefreshAtRef = useRef(0);
   const statusRef = useRef<string>('Initializing...');
   const lastPtsRef = useRef(BigInt(0));
   const currentCodecRef = useRef<string | null>(null);
@@ -125,7 +129,7 @@ export default function SessionWindow() {
       }
 
       let h265Supported = false;
-      for (const variation of ['hvc1.1.6.L123.B0', 'hev1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'hev1.1.6.L120.B0', 'h265', 'hevc']) {
+      for (const variation of ['hev1.1.6.L123.B0', 'hev1.1.6.L120.B0', 'hvc1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'h265', 'hevc']) {
         if (await testCodec(variation)) { h265Supported = true; break; }
       }
 
@@ -141,8 +145,6 @@ export default function SessionWindow() {
       }
 
       isWebCodecsSupportedRef.current = vp8Supported || vp9Supported || h264Supported || h265Supported || av1Supported;
-
-      console.log(`🎬 [WebCodecs] Browser codec support: vp8=${vp8Supported}, vp9=${vp9Supported}, h264=${h264Supported}, h265=${h265Supported}, av1=${av1Supported}`);
 
       if (!isWebCodecsSupportedRef.current) {
         console.warn('⚠️ [WebCodecs] No hardware acceleration supported, falling back to legacy.');
@@ -170,7 +172,6 @@ export default function SessionWindow() {
 
     const autoCloseOnFrame = () => {
       if (passwordReq) {
-        console.log("🚀 [Force Close] Video activity detected, closing password modal.");
         setPasswordReq(null);
       }
     };
@@ -193,19 +194,15 @@ export default function SessionWindow() {
           decoderRef.current = null;
         }
 
-        console.log(`🎬 [WebCodecs] Initializing decoder for ${format}, ${width}x${height}`);
-
         const codecVariations: string[] = [];
         const normalizedFormat = format.toUpperCase();
         switch (normalizedFormat) {
           case 'VP8': codecVariations.push('vp8', 'vp08.00.10.08'); break;
           case 'VP9': codecVariations.push('vp9', 'vp09.00.10.08'); break;
-          case 'H264': codecVariations.push('h264', 'avc1.42001e', 'avc1.42001f'); break;
-          case 'H265': codecVariations.push('hvc1.1.6.L123.B0', 'hev1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'hev1.1.6.L120.B0', 'h265', 'hevc'); break;
+          case 'H264': codecVariations.push('avc1.42001f', 'avc1.4D001F', 'avc1.64001F', 'h264'); break;
+          case 'H265': codecVariations.push('hev1.1.6.L123.B0', 'hev1.1.6.L120.B0', 'hvc1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'h265', 'hevc'); break;
           case 'AV1': codecVariations.push('av1', 'av01.0.08M.08'); break;
         }
-
-        console.log(`🎬 [WebCodecs] Trying configs for ${format}:`, codecVariations);
 
         let foundConfig: any = null;
         for (const c of codecVariations) {
@@ -213,10 +210,15 @@ export default function SessionWindow() {
             codec: c,
             codedWidth: width,
             codedHeight: height,
-            // 🚀 智能分流：VP9 硬解有致命Bug強製軟解，H264/AV1 啟動滿血純硬件解碼
             hardwareAcceleration: c.startsWith('vp') ? 'prefer-software' : 'prefer-hardware',
             optimizeForLatency: true,
           };
+
+          if (normalizedFormat === 'H264') {
+            Object.assign(config, { avc: { format: 'annexb' } });
+          } else if (normalizedFormat === 'H265') {
+            Object.assign(config, { hevc: { format: 'annexb' } });
+          }
           
           Object.assign(config, { _requestedAcceleration: config.hardwareAcceleration });
           try {
@@ -235,9 +237,6 @@ export default function SessionWindow() {
         const newDecoder = new VideoDecoder({
           output: (frame: VideoFrame) => {
             frameCount++;
-            if (frameCount % 60 === 1) {
-              console.log(`🎬 [WebCodecs] Decoded frame #${frameCount}: ${frame.displayWidth}x${frame.displayHeight}`);
-            }
             const canvas = canvasRef.current;
             if (!canvas) {
               if (frameCount % 60 === 1) console.warn('⚠️ [WebCodecs] Output received but canvas is null');
@@ -251,7 +250,6 @@ export default function SessionWindow() {
             }
 
             if (frame.displayWidth !== canvas.width || frame.displayHeight !== canvas.height) {
-              console.log(`📏 [WebCodecs] Resizing canvas to ${frame.displayWidth}x${frame.displayHeight}`);
               canvas.width = frame.displayWidth;
               canvas.height = frame.displayHeight;
               canvasCtxRef.current = null;
@@ -294,7 +292,6 @@ export default function SessionWindow() {
         decoderRef.current = newDecoder;
         lastDimensionsRef.current = { width, height };
         currentCodecRef.current = format;
-        console.log(`✅ [WebCodecs] Decoder initialized successfully for ${format} ${width}x${height}`);
       } catch (err) {
         console.error('❌ [WebCodecs] Initialization failed:', err);
       } finally {
@@ -334,7 +331,20 @@ export default function SessionWindow() {
       updateStatus('Software Rendering');
     };
 
-    videoChannel.onmessage = (rawPayload: any) => {
+    const hasAnnexBKeyFrame = (bytes: Uint8Array, format: string) => {
+      const keyNalTypes = format === 'H265' ? new Set([19, 20, 21]) : new Set([5]);
+      for (let i = 0; i + 5 < bytes.length; i++) {
+        let start = -1;
+        if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) start = i + 3;
+        else if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 && bytes[i + 3] === 1) start = i + 4;
+        if (start < 0 || start >= bytes.length) continue;
+        const nalType = format === 'H265' ? ((bytes[start] & 0x7E) >> 1) : (bytes[start] & 0x1F);
+        if (keyNalTypes.has(nalType)) return true;
+      }
+      return false;
+    };
+
+    videoChannel.onmessage = async (rawPayload: any) => {
       if (!rawPayload) return;
 
       let payload: Uint8Array;
@@ -375,12 +385,21 @@ export default function SessionWindow() {
         } else {
           isActuallyKey = false; // It's a delta frame, no matter what Rust says!
         }
+      } else if ((codec === 'H264' || codec === 'H265') && !isActuallyKey) {
+        isActuallyKey = hasAnnexBKeyFrame(data, codec);
       }
 
       // If we need a key frame but this isn't one, skip it
       if (needsKeyFrameRef.current && !isActuallyKey) {
+        const now = Date.now();
+        if (id && now - lastKeyFrameRefreshAtRef.current > 500) {
+          lastKeyFrameRefreshAtRef.current = now;
+          invoke('refresh_video', { id }).catch(() => { });
+        }
         return;
       }
+
+      if (isActuallyKey) keyFrameCountRef.current++;
 
       // MONOTONIC PTS
       if (timestamp <= lastPtsRef.current) timestamp = lastPtsRef.current + BigInt(33333);
@@ -395,14 +414,12 @@ export default function SessionWindow() {
       if (needsInit && !isInitializingRef.current) {
         const curW = dims.width || 1920;
         const curH = dims.height || 1080;
-        console.log(`⚙️ [WebCodecs] Re-initializing for ${codec} @ ${curW}x${curH}`);
         isInitializingRef.current = true;
         if (decoderRef.current) {
           try { decoderRef.current.close(); } catch { }
           decoderRef.current = null;
         }
-        initWebCodecs(codec, curW, curH);
-        return;
+        await initWebCodecs(codec, curW, curH);
       }
 
       if (isInitializingRef.current || !decoderRef.current) return;
@@ -432,7 +449,7 @@ export default function SessionWindow() {
           }
           activeDecoder.decode(new EncodedVideoChunk({
             type: isActuallyKey ? 'key' : 'delta',
-            timestamp: Number(timestamp), // PTS from Rust is milliseconds, WebCodecs needs microseconds
+            timestamp: Number(timestamp) * 1000,
             data
           }));
           frameCountRef.current++;
@@ -449,6 +466,7 @@ export default function SessionWindow() {
     if (id) {
       invoke('force_clear_video_channels', { id })
         .then(() => invoke('listen_video_stream', { id, channel: videoChannel }))
+        .then(() => invoke('refresh_video', { id }))
         .catch(console.error);
     }
 
@@ -468,13 +486,11 @@ export default function SessionWindow() {
     });
 
     const unlistenDisplays = listen('displays-updated', (event: any) => {
-      console.log("🖥️ [Tauri Event] DISPLAYS_UPDATED:", event.payload.length, "screens found.");
       setDisplays(event.payload);
     });
 
     const unlistenCurrentDisplay = listen('current-display-changed', (event: any) => {
       const newIdx = event.payload;
-      console.log(`🖥️ [Tauri Event] CURRENT_DISPLAY_CHANGED -> Index: ${newIdx} (Display ${newIdx + 1})`);
       setCurrentDisplay(newIdx);
     });
 
@@ -569,13 +585,16 @@ export default function SessionWindow() {
     const statsTimer = setInterval(() => {
       const currentCount = frameCountRef.current;
       const currentRecvCount = recvFrameCountRef.current;
+      const currentKeyCount = keyFrameCountRef.current;
       const currentRenderCount = renderFrameCountRef.current;
       const decodeFps = currentCount - lastLoggedFrameCountRef.current;
       const recvFps = currentRecvCount - lastRecvFrameCountRef.current;
+      const keyFps = currentKeyCount - lastKeyFrameCountRef.current;
       const renderFps = currentRenderCount - lastRenderFrameCountRef.current;
       const dropFps = droppedFrameCountRef.current;
       lastLoggedFrameCountRef.current = currentCount;
       lastRecvFrameCountRef.current = currentRecvCount;
+      lastKeyFrameCountRef.current = currentKeyCount;
       lastRenderFrameCountRef.current = currentRenderCount;
       setPerfStats(prev => ({
         ...prev,
@@ -584,6 +603,7 @@ export default function SessionWindow() {
         decodeFps,
         renderFps,
         dropFps,
+        keyFps,
         codec: currentCodecRef.current || 'None'
       }));
       droppedFrameCountRef.current = 0;
@@ -680,6 +700,9 @@ export default function SessionWindow() {
           setShowRemoteCursor={setShowRemoteCursor}
           remoteOptions={remoteOptions}
           onShowQualityPanel={() => setIsPerfCollapsed(false)}
+          onRemoteOptionChange={(key, value) => {
+            setRemoteOptions(prev => ({ ...prev, [key]: value }));
+          }}
         />
 
         {/* 📈 REAL-TIME TRAJECTORY MONITOR */}
@@ -734,7 +757,7 @@ export default function SessionWindow() {
             </div>
             <div className="rd-perf-row">
               <span className="rd-perf-label">{t('In/Dec')}:</span>
-              <span className="rd-perf-value">{perfStats.recvFps}/{perfStats.decodeFps}</span>
+              <span className="rd-perf-value">{perfStats.recvFps}/{perfStats.decodeFps} K:{perfStats.keyFps}</span>
             </div>
             <div className="rd-perf-row">
               <span className="rd-perf-label">{t('Render/Drop')}:</span>
@@ -782,7 +805,7 @@ export default function SessionWindow() {
             cursor: 'none',
             display: decoderRef.current ? 'block' : 'none'
           }}
-          onMouseDown={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
+          onMouseDown={e => { canvasRef.current?.focus(); const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
           onMouseUp={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
           onMouseMove={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_move', { id, ...c }); }}
           onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, deltaX: Math.round(e.deltaX), deltaY: Math.round(e.deltaY) }); }}

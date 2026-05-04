@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import {
   Monitor, Keyboard, Zap, ChevronDown,
   RefreshCcw, MousePointer2, Maximize,
-  Minimize, Scaling, FileText, Settings,
-  MessageSquare, ExternalLink, Lock, Maximize2, Minimize2, Activity
+  Minimize, Scaling, FileText,
+  ExternalLink, Lock, Maximize2, Minimize2, Activity,
+  MoreVertical, ChevronUp, Pin
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -20,9 +21,10 @@ interface RemoteToolbarProps {
   setShowRemoteCursor?: (show: boolean) => void;
   remoteOptions?: Record<string, boolean>;
   onShowQualityPanel?: () => void;
+  onRemoteOptionChange?: (key: string, value: boolean) => void;
 }
 
-export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays = [], currentDisplay = 0, showRemoteCursor = true, setShowRemoteCursor = () => {}, remoteOptions = {}, onShowQualityPanel }: RemoteToolbarProps) {
+export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays = [], currentDisplay = 0, showRemoteCursor = true, setShowRemoteCursor = () => {}, remoteOptions = {}, onShowQualityPanel, onRemoteOptionChange }: RemoteToolbarProps) {
   const { t } = useTranslation();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
@@ -142,9 +144,17 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
     setMenuPos(null);
   };
 
+  const setRemoteOption = (key: string, value: boolean) => {
+    onRemoteOptionChange?.(key, value);
+    invoke('set_remote_option', { id, key, value: value ? 'Y' : 'N' }).catch(() => {
+      onRemoteOptionChange?.(key, !value);
+    });
+  };
+
   const menuItems = {
     display: [
       { label: t('Scale: Contain'), active: viewMode === 'contain', onClick: () => onViewModeChange('contain'), icon: <Scaling size={14}/> },
+      { label: t('Scale: Cover'), active: viewMode === 'cover', onClick: () => onViewModeChange('cover'), icon: <Maximize2 size={14}/> },
       { label: t('Scale: Original'), active: viewMode === 'original', onClick: () => onViewModeChange('original'), icon: <Maximize size={14}/> },
       { divider: true },
       // Dynamic Monitor List
@@ -164,7 +174,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
         { 
           label: t('Lock Remote'), 
           active: remoteOptions['lock-kb'], 
-          onClick: () => invoke('set_remote_option', { id, key: 'lock-kb', value: remoteOptions['lock-kb'] ? 'N' : 'Y' }), 
+          onClick: () => setRemoteOption('lock-kb', !remoteOptions['lock-kb']), 
           icon: <Minimize size={14}/>, 
           isToggle: true 
         },
@@ -174,10 +184,10 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
     ],
     actions: [
         { label: '发送 Ctrl+Alt+Del', onClick: () => invoke('send_ctrl_alt_del', { id }), icon: <ExternalLink size={14}/> },
-        { label: t('Lock Remote'), onClick: () => invoke('set_remote_option', { id, key: 'lock-remote', value: 'Y' }), icon: <Lock size={14}/> },
-        { label: t('Privacy Mode'), active: remoteOptions['privacy-mode'], onClick: () => invoke('set_remote_option', { id, key: 'privacy-mode', value: remoteOptions['privacy-mode'] ? 'N' : 'Y' }), icon: <Monitor size={14}/>, isToggle: true },
+        { label: t('Lock Remote'), onClick: () => setRemoteOption('lock-remote', true), icon: <Lock size={14}/> },
+        { label: t('Privacy Mode'), active: remoteOptions['privacy-mode'], onClick: () => setRemoteOption('privacy-mode', !remoteOptions['privacy-mode']), icon: <Monitor size={14}/>, isToggle: true },
         { divider: true },
-        { label: t('Block Input'), active: remoteOptions['block-input'], onClick: () => invoke('set_remote_option', { id, key: 'block-input', value: remoteOptions['block-input'] ? 'N' : 'Y' }), isToggle: true },
+        { label: t('Block Input'), active: remoteOptions['block-input'], onClick: () => setRemoteOption('block-input', !remoteOptions['block-input']), isToggle: true },
     ]
   };
 
@@ -208,7 +218,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
           onMouseDown={isPinned ? handleMouseDown : undefined}
           onClick={() => setIsCollapsed(false)}
         >
-          ⋮
+          <MoreVertical size={16} />
         </div>
       ) : (
         // Expanded state - full toolbar
@@ -258,14 +268,8 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
             <button className="toolbar-btn" title={t('Fullscreen')} onClick={toggleFullscreen}>
               {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
-            <button className="toolbar-btn" title={t('Chat')} onClick={() => {}}>
-              <MessageSquare size={16} />
-            </button>
             <button className="toolbar-btn" title={t('File Transfer')} onClick={() => invoke('open_file_transfer_window', { id })}>
               <FileText size={16} />
-            </button>
-            <button className="toolbar-btn" title={t('Settings')} onClick={() => {}}>
-              <Settings size={16} />
             </button>
           </div>
 
@@ -275,7 +279,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
             onClick={() => setIsCollapsed(true)}
             title={t('Collapse')}
           >
-            ⏏
+            <ChevronUp size={16} />
           </button>
 
           <button
@@ -284,7 +288,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
              onClick={() => setIsPinned(!isPinned)}
              title={t('Pin Toolbar')}
           >
-            <div style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(-45deg)', transition: '0.2s' }}>📌</div>
+            <Pin size={14} style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(-45deg)', transition: '0.2s' }} />
           </button>
         </div>
       )}

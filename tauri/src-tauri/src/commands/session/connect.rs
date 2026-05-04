@@ -1,6 +1,7 @@
 // connect.rs
 use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 use crate::commands::session::{ACTIVE_SESSIONS, SESSION_SENDERS};
+use crate::commands::session::codecs::apply_cached_browser_supported_codecs;
 use crate::session_handler::TauriHandler;
 use librustdesk::ui_session_interface::{Session, io_loop};
 use librustdesk::client::Data;
@@ -59,6 +60,7 @@ pub async fn connect_to_peer(app: AppHandle, id: String, password: Option<String
         let s_clone = session.clone();
         let i_clone = id_clone.clone();
         ACTIVE_SESSIONS.lock().unwrap().insert(i_clone.clone(), s_clone.clone());
+        apply_cached_browser_supported_codecs(&i_clone, &s_clone);
 
         // Setup sender observer
         let s_obs = s_clone.clone();
@@ -67,6 +69,7 @@ pub async fn connect_to_peer(app: AppHandle, id: String, password: Option<String
             for _ in 0..100 {
                 if let Some(tx) = s_obs.sender.read().unwrap().as_ref() {
                     SESSION_SENDERS.lock().unwrap().insert(i_obs.clone(), tx.clone());
+                    apply_cached_browser_supported_codecs(&i_obs, &s_obs);
                     return;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -187,4 +190,5 @@ pub async fn is_session_connected(id: String) -> Result<bool, String> {
     if let Some(session) = sessions.get(&id) {
         return Ok(session.ui_handler.is_connected());
     }
-    Ok(fa
+    Ok(false)
+}

@@ -595,7 +595,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 height: c.height as _,
                 quality,
                 codec: VpxVideoCodecId::VP9,
-                keyframe_interval: Some(90),
+                keyframe_interval: Some(30),
             }));
             setup_encoder(
                 &c,
@@ -970,7 +970,7 @@ fn get_encoder_config(
     #[cfg(feature = "vram")]
     Encoder::update(scrap::codec::EncodingUpdate::Check);
     // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
-    let keyframe_interval = if record { Some(240) } else { Some(90) };
+    let keyframe_interval = if record { Some(240) } else { Some(30) };
     let negotiated_codec = Encoder::negotiated_codec();
     match negotiated_codec {
         CodecFormat::H264 | CodecFormat::H265 => {
