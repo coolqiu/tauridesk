@@ -1,6 +1,7 @@
 // lib.rs
 mod commands;
 mod session_handler;
+mod dummy_cm;
 
 use tauri::{Manager, Emitter, WebviewWindowBuilder};
 use std::sync::{Mutex};
@@ -37,7 +38,8 @@ pub fn run() {
                     }
                 }
                 if peer_id.is_empty() {
-                    if let Ok(sessions) = crate::commands::session_cmd::ACTIVE_SESSIONS.lock() {
+                    if let Ok(sessions) = crate::commands::session::ACTIVE_SESSIONS.lock() {
+                        let sessions: &std::collections::HashMap<String, librustdesk::ui_session_interface::Session<crate::session_handler::TauriHandler>> = &*sessions;
                         if sessions.len() == 1 {
                             if let Some(p) = sessions.keys().next() {
                                 peer_id = p.clone();
@@ -57,10 +59,36 @@ pub fn run() {
             // Incoming Connection
             let handle_incoming = handle.clone();
             *librustdesk::ui_interface::ON_INCOMING_CONN.lock().unwrap() = Some(Box::new(move |id, name, ip| {
-                println!("🔔 Incoming connection from: {} ({}) with ID: {}", name, ip, id);
+                // IMPORTANT: Use Config::get_id() instead of ipc::get_id() to avoid tokio runtime panics
+                let my_id = hbb_common::config::Config::get_id();
+                println!("🔍 [Tauri Bridge] Incoming connection request - ID: {}, Name: {}, Peer: {}, MyID: {}", id, name, ip, my_id);
+                
+                // If it's a self-connection (loopback) for testing, auto-authorize it quietly
+                // Check by ID or common loopback IPs
+                if (!ip.is_empty() && ip == my_id) || ip == "127.0.0.1" || ip == "localhost" || ip == "::1" {
+                    println!("🧪 [Tauri Bridge] SELF-LOOP detected. Auto-authorizing in separate thread...");
+                    std::thread::spawn(move || {
+                        // Small delay to ensure core state is ready
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        let mut conns = librustdesk::ui_interface::PENDING_CONNS.lock().unwrap();
+                        if let Some(tx) = conns.remove(&id) {
+                            println!("✅ [Tauri Bridge] Silent authorization SENT for ID: {}", id);
+                            let _ = tx.send(librustdesk::ipc::Data::Authorize {
+                                keyboard: true, clipboard: true, audio: true, file: true,
+                                restart: false, recording: true, block_input: false,
+                            });
+                        } else {
+                            println!("⚠️ [Tauri Bridge] Self-loop connection {} not found in pending list!", id);
+                        }
+                    });
+                    return;
+                }
+
+                println!("🔔 [Tauri Bridge] Incoming connection from: {} ({}) with ID: {}", name, ip, id);
                 if let Ok(mut map) = CONN_TO_PEER_MAP.lock() {
                     map.insert(id, ip.clone());
                 }
+                
                 let _ = WebviewWindowBuilder::new(
                     &handle_incoming,
                     format!("authorize_{}", id),
@@ -111,6 +139,16 @@ pub fn run() {
                     librustdesk::ui_interface::set_option("rendezvous-server".to_owned(), "rs-ny.rustdesk.com".to_owned());
                     librustdesk::ui_interface::set_option("voice-call".to_owned(), "Y".to_owned());
                     librustdesk::ui_interface::set_option("allow-remote-config-modification".to_owned(), "Y".to_owned());
+                    librustdesk::ui_interface::set_option("enable-hwcodec".to_owned(), "Y".to_owned());
+                    librustdesk::ui_interface::set_option("enable-directx-capture".to_owned(), "Y".to_owned());
+                    librustdesk::ui_interface::set_local_option("allow-d3d-render".to_owned(), "Y".to_owned());
+                    
+                    println!("🚀 [Core] Starting CM IPC Server for File Transfer...");
+                    std::thread::spawn(|| {
+                        let cm = librustdesk::ui_cm_interface::ConnectionManager { ui_handler: crate::dummy_cm::DummyUiCM };
+                        librustdesk::ui_cm_interface::start_ipc(cm);
+                    });
+
                     println!("🚀 [Core] Starting Unified Service (Headless Mode)...");
                     librustdesk::start_server(true, false);
                     std::thread::spawn(move || {
@@ -151,22 +189,41 @@ pub fn run() {
             commands::settings::is_installed,
             commands::system::get_app_info,
             commands::system::get_version,
-            commands::session_cmd::connect_to_peer,
-            commands::session_cmd::submit_password,
-            commands::session_cmd::is_session_connected,
-            commands::session_cmd::listen_video_stream,
-            commands::session_cmd::unlisten_video_stream,
-            commands::session_cmd::force_clear_video_channels,
-            commands::session_cmd::set_browser_supported_codecs,
-            commands::session_cmd::refresh_video,
-            commands::session_cmd::send_mouse_event,
-            commands::session_cmd::send_mouse_move,
-            commands::session_cmd::send_wheel,
-            commands::session_cmd::send_key_event,
-            commands::session_cmd::switch_display,
+            commands::session::connect_to_peer,
+            commands::session::fs_connect,
+            commands::session::submit_password,
+            commands::session::is_session_connected,
+            commands::session::listen_video_stream,
+            commands::session::unlisten_video_stream,
+            commands::session::force_clear_video_channels,
+            commands::session::set_browser_supported_codecs,
+            commands::session::refresh_video,
+            commands::session::send_mouse_event,
+            commands::session::send_mouse_move,
+            commands::session::send_wheel,
+            commands::session::send_key_event,
+            commands::session::send_ctrl_alt_del,
+            commands::session::set_remote_option,
+            commands::session::switch_display,
             commands::auth::authorize_connection,
             commands::auth::reject_connection,
             commands::clipboard_cmd::send_clipboard_text,
+            commands::file_transfer::fs_read_local_dir,
+            commands::file_transfer::fs_read_remote_dir,
+            commands::file_transfer::fs_get_home_dir,
+            commands::file_transfer::open_file_transfer_window,
+            commands::file_transfer::fs_transfer_files,
+            commands::file_transfer::fs_cancel_job,
+            commands::file_transfer::fs_resume_job,
+            commands::file_transfer::fs_create_dir,
+            commands::file_transfer::fs_remove_file,
+            commands::file_transfer::fs_remove_dir_all,
+            commands::file_transfer::fs_read_dir_to_remove_recursive,
+            commands::file_transfer::fs_remove_all_empty_dirs,
+            commands::file_transfer::fs_set_no_confirm,
+            commands::file_transfer::fs_confirm_delete_files,
+            commands::file_transfer::fs_rename_file,
+            commands::file_transfer::fs_confirm_override_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

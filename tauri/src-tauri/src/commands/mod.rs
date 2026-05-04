@@ -5,6 +5,7 @@ pub mod server;
 pub mod peers;
 pub mod settings;
 pub mod system;
-pub mod session_cmd;
+pub mod session;
 pub mod auth;
 pub mod clipboard_cmd;
+pub mod file_transfer;

@@ -2,18 +2,25 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, Channel } from '@tauri-apps/api/core';
-import { Lock, Monitor, Info, Activity, Scaling, Maximize, RotateCcw, MousePointer2, ExternalLink, Keyboard, Minimize } from 'lucide-react';
+import { Lock, Monitor, Info, Activity } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import RemoteToolbar from '../components/RemoteToolbar';
 import '../index.css';
 
 // Check if WebCodecs is supported at module level
 const isWebCodecsSupported = typeof VideoDecoder !== 'undefined' && typeof VideoDecoder.isConfigSupported !== 'undefined';
+type QualityMode = 'smooth' | 'balanced' | 'quality';
+
+const readQualityMode = (): QualityMode => {
+  const saved = localStorage.getItem('rustdesk-quality-mode');
+  return saved === 'smooth' || saved === 'balanced' || saved === 'quality' ? saved : 'balanced';
+};
 
 export default function SessionWindow() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const [status, setStatus] = useState<string>('Initializing...');
   const [viewMode, setViewMode] = useState<'contain' | 'cover' | 'original'>('contain');
   const codecSupportSentRef = useRef<boolean>(false);
@@ -23,7 +30,19 @@ export default function SessionWindow() {
   const [showRemoteCursor, setShowRemoteCursor] = useState<boolean>(true);
   const showRemoteCursorRef = useRef(true);
   const viewModeRef = useRef<'contain' | 'cover' | 'original'>('contain');
-  const [perfStats, setPerfStats] = useState({ fps: 0, speed: '-', delay: '-', codec: '' });
+  const [qualityMode, setQualityMode] = useState<QualityMode>(readQualityMode);
+  const [isPerfCollapsed, setIsPerfCollapsed] = useState(true);
+  const qualityModeRef = useRef<QualityMode>(qualityMode);
+  const [perfStats, setPerfStats] = useState({
+    fps: 0,
+    recvFps: 0,
+    decodeFps: 0,
+    renderFps: 0,
+    dropFps: 0,
+    speed: '-',
+    delay: '-',
+    codec: ''
+  });
   const [remoteOptions, setRemoteOptions] = useState<Record<string, boolean>>({
     'block-input': false,
     'privacy-mode': false,
@@ -40,6 +59,12 @@ export default function SessionWindow() {
   const lastSkippedRef = useRef(0); // Default to no skipping, start from beginning
   const lastChunkRef = useRef<Uint8Array | null>(null);
   const frameCountRef = useRef(0);
+  const recvFrameCountRef = useRef(0);
+  const renderFrameCountRef = useRef(0);
+  const droppedFrameCountRef = useRef(0);
+  const lastRecvFrameCountRef = useRef(0);
+  const lastRenderFrameCountRef = useRef(0);
+  const statusRef = useRef<string>('Initializing...');
   const lastPtsRef = useRef(BigInt(0));
   const currentCodecRef = useRef<string | null>(null);
   const isInitializingRef = useRef<boolean>(false);
@@ -50,6 +75,26 @@ export default function SessionWindow() {
   const cursorDivRef = useRef<HTMLDivElement | null>(null);
   const cursorImageCacheRef = useRef<Map<string, string>>(new Map()); // cursorId -> dataURI
   const currentCursorIdRef = useRef<string>('');
+
+  const updateStatus = (next: string) => {
+    if (statusRef.current === next) return;
+    statusRef.current = next;
+    setStatus(next);
+  };
+
+  const getCanvasContext = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    if (!canvasCtxRef.current) {
+      canvasCtxRef.current = canvas.getContext('2d', { alpha: false, desynchronized: true } as CanvasRenderingContext2DSettings);
+    }
+    return canvasCtxRef.current;
+  };
+
+  useEffect(() => {
+    qualityModeRef.current = qualityMode;
+    localStorage.setItem('rustdesk-quality-mode', qualityMode);
+  }, [qualityMode]);
 
   useEffect(() => {
     // Detect which codecs are supported by this browser via WebCodecs and inform Rust
@@ -70,24 +115,24 @@ export default function SessionWindow() {
 
       // Priority detection: try to find at least one reliable variation
       // Include higher level (4.0/4.1) for 1080p support
-      let vp9Supported = false;
-      for (const variation of ['vp09.00.41.08', 'vp09.00.40.08', 'vp09.00.10.08', 'vp09.02.41.08', 'vp09.01.41.08', 'vp09.01.10.08', 'vp9']) {
-        if (await testCodec(variation)) {
-          vp9Supported = true;
-          console.log(`🎬 [WebCodecs] Selected VP9 codec: ${variation} (supports 1080p)`);
-          break;
-        }
-      }
+      // VP9 currently falls back to software in WebView and gradually builds
+      // latency on high-motion desktops. Keep it out of the default Tauri path.
+      const vp9Supported = false;
 
       let h264Supported = false;
       for (const variation of ['avc1.42001f', 'avc1.4D001F', 'avc1.64001F', 'h264']) {
         if (await testCodec(variation)) { h264Supported = true; break; }
       }
 
-      let av1Supported = false;
-      for (const variation of ['av01.0.08M.08', 'av01.0.04M.08', 'av1']) {
-        if (await testCodec(variation)) { av1Supported = true; break; }
+      let h265Supported = false;
+      for (const variation of ['hvc1.1.6.L123.B0', 'hev1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'hev1.1.6.L120.B0', 'h265', 'hevc']) {
+        if (await testCodec(variation)) { h265Supported = true; break; }
       }
+
+      // AV1 can be supported by WebCodecs but still be a poor default for
+      // interactive remote control. Prefer H264/VPx until codec preference UI
+      // exists, otherwise video-heavy desktops can negotiate AV1 and crawl.
+      const av1Supported = false;
 
       // VP8 is last priority
       let vp8Supported = false;
@@ -95,13 +140,13 @@ export default function SessionWindow() {
         if (await testCodec(variation)) { vp8Supported = true; break; }
       }
 
-      isWebCodecsSupportedRef.current = vp8Supported || vp9Supported || h264Supported || av1Supported;
+      isWebCodecsSupportedRef.current = vp8Supported || vp9Supported || h264Supported || h265Supported || av1Supported;
 
-      console.log(`🎬 [WebCodecs] Browser codec support: vp8=${vp8Supported}, vp9=${vp9Supported}, h264=${h264Supported}, av1=${av1Supported}`);
+      console.log(`🎬 [WebCodecs] Browser codec support: vp8=${vp8Supported}, vp9=${vp9Supported}, h264=${h264Supported}, h265=${h265Supported}, av1=${av1Supported}`);
 
       if (!isWebCodecsSupportedRef.current) {
         console.warn('⚠️ [WebCodecs] No hardware acceleration supported, falling back to legacy.');
-        setStatus('WebCodecs Not Supported');
+        updateStatus('WebCodecs Not Supported');
         return;
       }
 
@@ -112,6 +157,7 @@ export default function SessionWindow() {
           vp8: vp8Supported,
           vp9: vp9Supported,
           h264: h264Supported,
+          h265: h265Supported,
           av1: av1Supported
         }).catch(err => console.error("❌ Failed to send codec support to Rust:", err));
       }
@@ -155,6 +201,7 @@ export default function SessionWindow() {
           case 'VP8': codecVariations.push('vp8', 'vp08.00.10.08'); break;
           case 'VP9': codecVariations.push('vp9', 'vp09.00.10.08'); break;
           case 'H264': codecVariations.push('h264', 'avc1.42001e', 'avc1.42001f'); break;
+          case 'H265': codecVariations.push('hvc1.1.6.L123.B0', 'hev1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'hev1.1.6.L120.B0', 'h265', 'hevc'); break;
           case 'AV1': codecVariations.push('av1', 'av01.0.08M.08'); break;
         }
 
@@ -197,7 +244,7 @@ export default function SessionWindow() {
               frame.close();
               return;
             }
-            const ctx = canvas.getContext('2d', { alpha: false });
+            const ctx = getCanvasContext();
             if (!ctx) {
               frame.close();
               return;
@@ -207,23 +254,25 @@ export default function SessionWindow() {
               console.log(`📏 [WebCodecs] Resizing canvas to ${frame.displayWidth}x${frame.displayHeight}`);
               canvas.width = frame.displayWidth;
               canvas.height = frame.displayHeight;
+              canvasCtxRef.current = null;
             }
 
             ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
             frame.close();
+            renderFrameCountRef.current++;
             autoCloseOnFrame();
             
             // WebCodecs standard doesn't officially expose `.acceleration` on VideoDecoder synchronously across all browsers yet.
             // We use the requested acceleration strategy to reliably report intended hardware mode.
             const reqMode = (decoderRef.current as any)?._requestedAcceleration || 'prefer-software';
             const modeStr = reqMode === 'prefer-hardware' ? '[GPU]' : '[CPU]';
-            if (status !== `WebCodecs ${modeStr}`) setStatus(`WebCodecs ${modeStr}`);
+            updateStatus(`WebCodecs ${modeStr}`);
           },
           error: (e: any) => {
             const hex = Array.from(lastChunkRef.current?.subarray(0, 16) || [])
               .map(b => b.toString(16).padStart(2, '0')).join(' ');
             console.error(`❌ WebCodecs 拒绝解码！原因: ${e.message} | 数据指纹: ${hex}`);
-            setStatus(`WebCodecs Error: ${e.message}`);
+            updateStatus(`WebCodecs Error: ${e.message}`);
 
             // If hardware acceleration fails, force re-init with software fallback
             if (decoderRef.current) {
@@ -256,12 +305,13 @@ export default function SessionWindow() {
     const handleLegacyRgba = (pixelBytes: Uint8ClampedArray, w: number, h: number) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext('2d', { alpha: false });
+      const ctx = getCanvasContext();
       if (!ctx) return;
 
       if (w !== canvas.width || h !== canvas.height) {
         canvas.width = w;
         canvas.height = h;
+        canvasCtxRef.current = null;
         lastDimensionsRef.current = { width: w, height: h };
       }
 
@@ -279,8 +329,9 @@ export default function SessionWindow() {
         }
       }
       ctx.putImageData(imgData, 0, 0);
+      renderFrameCountRef.current++;
       autoCloseOnFrame();
-      if (status !== 'Software Rendering') setStatus('Software Rendering');
+      updateStatus('Software Rendering');
     };
 
     videoChannel.onmessage = (rawPayload: any) => {
@@ -306,6 +357,7 @@ export default function SessionWindow() {
 
       const codec = CODEC_MAP[typeByte];
       if (!codec || !isWebCodecsSupportedRef.current) return;
+      recvFrameCountRef.current++;
 
       const isKey = view.getUint8(1) === 1;
       let timestamp = view.getBigInt64(2, true);
@@ -358,16 +410,30 @@ export default function SessionWindow() {
       if (isActuallyKey) needsKeyFrameRef.current = false;
 
       // Save last chunk for error debugging
-      lastChunkRef.current = data.slice();
+      lastChunkRef.current = data.subarray(0, Math.min(data.length, 64));
 
       // DECODE
       const activeDecoder = decoderRef.current;
       if (activeDecoder && activeDecoder.state === 'configured') {
         try {
+          const queueSize = activeDecoder.decodeQueueSize;
+          const mode = qualityModeRef.current;
+          const softQueueLimit = mode === 'smooth' ? 1 : mode === 'quality' ? 4 : 2;
+          const hardQueueLimit = mode === 'smooth' ? 4 : mode === 'quality' ? 12 : 8;
+          if (queueSize > softQueueLimit && !isActuallyKey) {
+            droppedFrameCountRef.current++;
+            return;
+          }
+          if (queueSize > hardQueueLimit) {
+            droppedFrameCountRef.current++;
+            needsKeyFrameRef.current = true;
+            invoke('refresh_video', { id }).catch(() => { });
+            return;
+          }
           activeDecoder.decode(new EncodedVideoChunk({
             type: isActuallyKey ? 'key' : 'delta',
             timestamp: Number(timestamp), // PTS from Rust is milliseconds, WebCodecs needs microseconds
-            data: data.slice() // Safe clone for GPU memory management
+            data
           }));
           frameCountRef.current++;
         } catch (e: any) {
@@ -502,13 +568,25 @@ export default function SessionWindow() {
     // 📊 Trajectory Stats Timer: Update UI every second from refs
     const statsTimer = setInterval(() => {
       const currentCount = frameCountRef.current;
-      const fps = currentCount - lastLoggedFrameCountRef.current;
+      const currentRecvCount = recvFrameCountRef.current;
+      const currentRenderCount = renderFrameCountRef.current;
+      const decodeFps = currentCount - lastLoggedFrameCountRef.current;
+      const recvFps = currentRecvCount - lastRecvFrameCountRef.current;
+      const renderFps = currentRenderCount - lastRenderFrameCountRef.current;
+      const dropFps = droppedFrameCountRef.current;
       lastLoggedFrameCountRef.current = currentCount;
+      lastRecvFrameCountRef.current = currentRecvCount;
+      lastRenderFrameCountRef.current = currentRenderCount;
       setPerfStats(prev => ({
         ...prev,
-        fps,
+        fps: renderFps,
+        recvFps,
+        decodeFps,
+        renderFps,
+        dropFps,
         codec: currentCodecRef.current || 'None'
       }));
+      droppedFrameCountRef.current = 0;
     }, 1000);
 
     return () => {
@@ -534,6 +612,7 @@ export default function SessionWindow() {
         decoderRef.current.close();
         decoderRef.current = null;
       }
+      canvasCtxRef.current = null;
       // 清理光标 blob URL 缓存
       cursorImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
       cursorImageCacheRef.current.clear();
@@ -600,36 +679,77 @@ export default function SessionWindow() {
           showRemoteCursor={showRemoteCursor}
           setShowRemoteCursor={setShowRemoteCursor}
           remoteOptions={remoteOptions}
+          onShowQualityPanel={() => setIsPerfCollapsed(false)}
         />
 
         {/* 📈 REAL-TIME TRAJECTORY MONITOR */}
-        <div className="rd-perf-monitor">
-          <div className="rd-perf-header">
-            <Activity size={12} /> {t('Session Quality')}
+        {!isPerfCollapsed && (
+          <div className="rd-perf-monitor">
+            <div className="rd-perf-header">
+              <span><Activity size={12} /> {t('Session Quality')}</span>
+              <button
+                className="rd-perf-toggle"
+                onClick={() => setIsPerfCollapsed(true)}
+                title={t('Collapse')}
+              >
+                x
+              </button>
+            </div>
+            <div className="rd-quality-modes">
+              <button
+                className={qualityMode === 'smooth' ? 'active' : ''}
+                onClick={() => setQualityMode('smooth')}
+                title={t('Prefer smoothness')}
+              >
+                {t('Smooth')}
+              </button>
+              <button
+                className={qualityMode === 'balanced' ? 'active' : ''}
+                onClick={() => setQualityMode('balanced')}
+                title={t('Balanced')}
+              >
+                {t('Balance')}
+              </button>
+              <button
+                className={qualityMode === 'quality' ? 'active' : ''}
+                onClick={() => setQualityMode('quality')}
+                title={t('Prefer quality')}
+              >
+                {t('Quality')}
+              </button>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('Path')}:</span>
+              <span className="rd-perf-value active">
+                {decoderRef.current ? (status.includes('[GPU]') ? 'HARDWARE+' : 'SOFTWARE') : 'WAITING...'}
+              </span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('Codec')}:</span>
+              <span className="rd-perf-value">{perfStats.codec}</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('FPS')}:</span>
+              <span className="rd-perf-value highlight">{perfStats.fps} FPS</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('In/Dec')}:</span>
+              <span className="rd-perf-value">{perfStats.recvFps}/{perfStats.decodeFps}</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('Render/Drop')}:</span>
+              <span className="rd-perf-value">{perfStats.renderFps}/{perfStats.dropFps}</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('Speed')}:</span>
+              <span className="rd-perf-value">{perfStats.speed}</span>
+            </div>
+            <div className="rd-perf-row">
+              <span className="rd-perf-label">{t('Delay')}:</span>
+              <span className="rd-perf-value">{perfStats.delay}</span>
+            </div>
           </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">{t('Path')}:</span>
-            <span className="rd-perf-value active">
-              {decoderRef.current ? (status.includes('[GPU]') ? 'HARDWARE+' : 'SOFTWARE') : 'WAITING...'}
-            </span>
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">{t('Codec')}:</span>
-            <span className="rd-perf-value">{perfStats.codec}</span>
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">{t('FPS')}:</span>
-            <span className="rd-perf-value highlight">{perfStats.fps} FPS</span>
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">{t('Speed')}:</span>
-            <span className="rd-perf-value">{perfStats.speed}</span>
-          </div>
-          <div className="rd-perf-row">
-            <span className="rd-perf-label">{t('Delay')}:</span>
-            <span className="rd-perf-value">{perfStats.delay}</span>
-          </div>
-        </div>
+        )}
 
         {/* 🖥️ QUICK DISPLAY SWITCHER */}
         {displays.length > 1 && (
@@ -665,7 +785,7 @@ export default function SessionWindow() {
           onMouseDown={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: true }); }}
           onMouseUp={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_event', { id, ...c, button: e.button, pressed: false }); }}
           onMouseMove={e => { const c = getCoords(e); if (c && id) invoke('send_mouse_move', { id, ...c }); }}
-          onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, delta_x: Math.round(e.deltaX), delta_y: Math.round(e.deltaY) }); }}
+          onWheel={e => { const c = getCoords(e); if (c && id) invoke('send_wheel', { id, ...c, deltaX: Math.round(e.deltaX), deltaY: Math.round(e.deltaY) }); }}
           onContextMenu={e => e.preventDefault()}
           tabIndex={0}
           onKeyDown={e => {

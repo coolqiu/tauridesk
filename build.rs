@@ -8,6 +8,13 @@ fn build_windows() {
     println!("cargo:rerun-if-changed={}", file2);
 }
 
+#[cfg(all(windows, feature = "hwcodec"))]
+fn link_windows_hwcodec_deps() {
+    println!("cargo:rustc-link-lib=static=swresample");
+    println!("cargo:rustc-link-lib=mfuuid");
+    println!("cargo:rustc-link-lib=strmiids");
+}
+
 #[cfg(target_os = "macos")]
 fn build_mac() {
     let file = "src/platform/macos.mm";
@@ -84,6 +91,8 @@ fn main() {
     build_manifest();
     #[cfg(windows)]
     build_windows();
+    #[cfg(all(windows, feature = "hwcodec"))]
+    link_windows_hwcodec_deps();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "macos" {
         #[cfg(target_os = "macos")]

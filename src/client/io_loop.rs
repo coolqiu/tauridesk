@@ -1285,12 +1285,11 @@ impl<T: InvokeUiSession> Remote<T> {
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
                     // 📡 [Phase 21 Debug] 网络层：接收到视频包
-                    static mut RECV_COUNT: u64 = 0;
-                    unsafe {
-                        RECV_COUNT += 1;
-                        if RECV_COUNT % 60 == 1 {
-                            println!("📡 [Network] Received VideoFrame #{} for display {}, total_size={}", RECV_COUNT, vf.display, data.len());
-                        }
+                    use std::sync::atomic::{AtomicU64, Ordering};
+                    static RECV_COUNT: AtomicU64 = AtomicU64::new(0);
+                    let count = RECV_COUNT.fetch_add(1, Ordering::SeqCst) + 1;
+                    if count % 60 == 1 {
+                        println!("📡 [Network] Received VideoFrame #{} for display {}, total_size={}", count, vf.display, data.len());
                     }
 
                     if !self.first_frame {
@@ -1314,6 +1313,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ => {}
+                    }
+
+                    if !self.handler.needs_software_decoding() {
+                        return true;
                     }
 
                     if !self.video_threads.contains_key(&display) {

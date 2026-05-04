@@ -6,6 +6,7 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import App from './App.tsx'
 import SessionWindow from './pages/SessionWindow.tsx'
 import AuthorizeWindow from './pages/AuthorizeWindow.tsx'
+import FileTransferPage from './pages/FileTransferPage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/session/:id" element={<SessionWindow />} />
+        <Route path="/file-transfer/:id" element={<FileTransferPage />} />
         <Route path="/authorize" element={<AuthorizeWindow />} />
       </Routes>
     </HashRouter>

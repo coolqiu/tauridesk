@@ -35,12 +35,12 @@ export default function App() {
   }, [fetchServerState, fetchPeers, fetchOptions]);
 
   return (
-    <div className="flex-col h-screen w-screen overflow-hidden bg-[var(--rd-bg-scaffold)]">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--rd-bg-scaffold)' }}>
       <TitleBar activeTab={activeTab} onTabChange={setActiveTab} />
       
-      <main className="main-layout flex-1">
+      <main style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {activeTab === 'home' && (
-          <div className="flex-row flex-1 h-full w-full">
+          <div style={{ display: 'flex', flex: 1, width: '100%', minHeight: 0 }}>
             <LocalPanel />
             <div className="workspace-area flex-1">
               <RemotePanel />

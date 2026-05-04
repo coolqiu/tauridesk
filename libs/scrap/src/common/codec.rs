@@ -191,6 +191,7 @@ impl Encoder {
         }
 
         let vp8_useable = decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_vp8 > 0);
+        let vp9_useable = decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_vp9 > 0);
         let av1_useable = decodings.len() > 0
             && decodings.iter().all(|(_, s)| s.ability_av1 > 0)
             && !disable_av1();
@@ -238,7 +239,7 @@ impl Encoder {
         let preferences: Vec<_> = decodings
             .iter()
             .filter(|(_, s)| {
-                s.prefer == PreferCodec::VP9.into()
+                s.prefer == PreferCodec::VP9.into() && vp9_useable
                     || s.prefer == PreferCodec::VP8.into() && vp8_useable
                     || s.prefer == PreferCodec::AV1.into() && av1_useable
                     || s.prefer == PreferCodec::H264.into() && h264_useable
@@ -268,13 +269,16 @@ impl Encoder {
             .unwrap_or((PreferCodec::Auto.into(), 0));
         let preference = most_frequent.enum_value_or(PreferCodec::Auto);
 
-        // auto: h265 > h264 > av1/vp9/vp8
+        // auto: h265 > h264 > av1 > vp9 > vp8, but only advertise codecs
+        // every connected peer can actually decode.
         let av1_test = Config::get_option(hbb_common::config::keys::OPTION_AV1_TEST) != "N";
-        let mut auto_codec = if av1_useable && av1_test {
-            CodecFormat::AV1
-        } else {
-            CodecFormat::VP9
-        };
+        let mut auto_codec = CodecFormat::VP8;
+        if vp9_useable {
+            auto_codec = CodecFormat::VP9;
+        }
+        if av1_useable && av1_test {
+            auto_codec = CodecFormat::AV1;
+        }
         if h264_useable {
             auto_codec = CodecFormat::H264;
         }
@@ -312,7 +316,7 @@ impl Encoder {
         };
         if decodings.len() > 0 {
             log::info!(
-                "usable: vp8={vp8_useable}, av1={av1_useable}, h264={h264_useable}, h265={h265_useable}",
+                "usable: vp8={vp8_useable}, vp9={vp9_useable}, av1={av1_useable}, h264={h264_useable}, h265={h265_useable}",
             );
             log::info!(
                 "connection count: {}, used preference: {:?}, encoder: {:?}",

@@ -1,0 +1,8 @@
+{
+  "name": "rustdesk-tauri-ui",
+  "description": "RustDesk Tauri-based UI project",
+  "private": true,
+  "engines": {
+    "node": ">=16"
+  }
+}

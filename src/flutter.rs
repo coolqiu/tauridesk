@@ -1051,7 +1051,6 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String) {
         self.push_event("clipboard", &[("content", &content)], &[]);
     }

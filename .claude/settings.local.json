@@ -1,8 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs ls:*)",
-      "Bash(find . -name \"*.tsx\" -exec grep -l \"[一-龥]\" {} \\\\;)"
+      "Bash(powershell -Command *)",
+      "Bash(dir *)",
+      "Bash(cargo build:*)",
+      "Bash(cmd /c *)"
     ]
   }
 }

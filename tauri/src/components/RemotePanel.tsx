@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePeerStore } from '../store/peerStore';
+import PasswordModal from './PasswordModal';
 
 export default function RemotePanel() {
   const { t } = useTranslation();
@@ -18,6 +19,11 @@ export default function RemotePanel() {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
   const [isRelayForced, setIsRelayForced] = useState(false);
+  
+  // Auth Modal State
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authTargetId, setAuthTargetId] = useState('');
+  
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { recentPeers } = usePeerStore();
@@ -29,6 +35,30 @@ export default function RemotePanel() {
        console.error("Connection failed:", err);
     });
     setActiveMenuId(null);
+  };
+
+  const handleOpenFileTransfer = async (id: string | null) => {
+    const targetId = id || remoteId;
+    if (!targetId) return;
+    
+    try {
+      const connected = await invoke<boolean>('is_session_connected', { id: targetId });
+      if (connected) {
+        await invoke('open_file_transfer_window', { id: targetId });
+      } else {
+        setAuthTargetId(targetId);
+        setShowAuthModal(true);
+      }
+    } catch (e) {
+      console.error("Failed to check connection:", e);
+    }
+    setActiveMenuId(null);
+  };
+
+  const confirmAuth = async (password: string) => {
+    await invoke('fs_connect', { id: authTargetId, password });
+    await invoke('open_file_transfer_window', { id: authTargetId });
+    setShowAuthModal(false);
   };
 
   const toggleMenu = (id: string, e: React.MouseEvent) => {
@@ -82,7 +112,7 @@ export default function RemotePanel() {
     <div className="flex-1 overflow-hidden" onClick={closeMenus} style={{ padding: '0 30px', display: 'grid', gridTemplateRows: '1fr 3fr', height: '100%' }}>
       
       {/* 1. TOP SECTION (ID & CONNECTION) - EXACTLY 1/4 (1fr) */}
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: '20px', minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minHeight: 0 }}>
           <div className="rd-conn-section" style={{ maxWidth: '600px', margin: '0', padding: '15px 20px' }}>
             <div className="rd-conn-title" style={{ marginBottom: '12px', fontSize: '14px' }}>
                 {t('Control Remote Desktop')} <HelpCircle size={14} style={{ opacity: 0.3, cursor: 'help' }} />
@@ -189,7 +219,7 @@ export default function RemotePanel() {
       {/* 5. PORTAL DROPDOWNS (FULL FEATURE RESTORE) */}
       {activeMenuId === 'connect-menu' && menuPos && createPortal(
         <div ref={menuRef} className="rd-dropdown rs-portal-dropdown show" style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}>
-            <div className="rd-menu-item" onClick={() => onConnect(null)}>{t('File Transfer')}</div>
+            <div className="rd-menu-item" onClick={() => handleOpenFileTransfer(null)}>{t('File Transfer')}</div>
             <div className="rd-menu-item">{t('View Camera')}</div>
             <div className="rd-menu-item">{t('Terminal')} (beta)</div>
         </div>,
@@ -208,8 +238,8 @@ export default function RemotePanel() {
 
       {activeMenuId?.startsWith('peer-menu-') && menuPos && createPortal(
         <div ref={menuRef} className="rd-dropdown rs-portal-dropdown show" style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, minWidth: '220px' }}>
-            <div className="rd-menu-item">{t('Connect')}<div style={{ opacity: 0.4 }}><Monitor size={14}/></div></div>
-            <div className="rd-menu-item">{t('File Transfer')}<div style={{ opacity: 0.4 }}><FileText size={14}/></div></div>
+            <div className="rd-menu-item" onClick={() => onConnect(activeMenuId.replace('peer-menu-', ''))}>{t('Connect')}<div style={{ opacity: 0.4 }}><Monitor size={14}/></div></div>
+            <div className="rd-menu-item" onClick={() => handleOpenFileTransfer(activeMenuId.replace('peer-menu-', ''))}>{t('File Transfer')}<div style={{ opacity: 0.4 }}><FileText size={14}/></div></div>
             <div className="rd-menu-item">{t('View Camera')}<div style={{ opacity: 0.4 }}><Camera size={14}/></div></div>
             <div className="rd-menu-item">{t('Terminal')} (beta)<div style={{ opacity: 0.4 }}><Terminal size={14}/></div></div>
             <div className="rd-menu-item">{t('Terminal (elevated)')} (beta)</div>
@@ -238,6 +268,13 @@ export default function RemotePanel() {
             <div className="rd-menu-item danger">{t('Delete')}<Trash2 size={14} /></div>
         </div>,
         document.body
+      )}
+      {showAuthModal && (
+        <PasswordModal 
+          id={authTargetId} 
+          onConfirm={confirmAuth} 
+          onClose={() => setShowAuthModal(false)} 
+        />
       )}
     </div>
   );

@@ -2217,7 +2217,7 @@ impl Connection {
                 if let Some(cb) = crate::ui_interface::ON_INCOMING_CONN.lock().unwrap().as_ref() {
                     cb(id, peer_id, peer_name);
                 }
-                return;
+                // Do NOT return; we still need the IPC client to connect to _cm for file transfer
             }
 
             tokio::spawn(async move {
@@ -2271,7 +2271,7 @@ impl Connection {
             if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
                 let id = self.inner.id();
                 let peer_id = lr.my_id.clone();
-                let peer_name = lr.my_name.clone();
+                let _peer_name = lr.my_name.clone();
                 println!("📢 [Tauri Auth] Triggering popup for {} (id: {})", peer_id, id);
                 
                 // We need to register the sender here because handle_login_request_without_validation

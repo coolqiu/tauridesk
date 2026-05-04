@@ -5,7 +5,7 @@ import {
   Monitor, Keyboard, Zap, ChevronDown,
   RefreshCcw, MousePointer2, Maximize,
   Minimize, Scaling, FileText, Settings,
-  MessageSquare, ExternalLink, Lock, Fullscreen, FullscreenExit
+  MessageSquare, ExternalLink, Lock, Maximize2, Minimize2, Activity
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -19,9 +19,10 @@ interface RemoteToolbarProps {
   showRemoteCursor?: boolean;
   setShowRemoteCursor?: (show: boolean) => void;
   remoteOptions?: Record<string, boolean>;
+  onShowQualityPanel?: () => void;
 }
 
-export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays = [], currentDisplay = 0, showRemoteCursor = true, setShowRemoteCursor = () => {}, remoteOptions = {} }: RemoteToolbarProps) {
+export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays = [], currentDisplay = 0, showRemoteCursor = true, setShowRemoteCursor = () => {}, remoteOptions = {}, onShowQualityPanel }: RemoteToolbarProps) {
   const { t } = useTranslation();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
@@ -156,6 +157,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
       { divider: true },
       { label: t('Refresh'), onClick: () => invoke('refresh_video', { id }), icon: <RefreshCcw size={14}/> },
       { label: t('Show Remote Cursor'), active: showRemoteCursor, onClick: () => setShowRemoteCursor(!showRemoteCursor), icon: <MousePointer2 size={14}/>, isToggle: true },
+      { label: t('Session Quality'), onClick: onShowQualityPanel, icon: <Activity size={14}/> },
     ],
     input: [
         { label: t('Connect'), active: true, icon: <Keyboard size={14}/>, isToggle: true },
@@ -254,12 +256,12 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
 
           <div className="toolbar-section">
             <button className="toolbar-btn" title={t('Fullscreen')} onClick={toggleFullscreen}>
-              <Fullscreen size={16} />
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
             <button className="toolbar-btn" title={t('Chat')} onClick={() => {}}>
               <MessageSquare size={16} />
             </button>
-            <button className="toolbar-btn" title={t('File Transfer')} onClick={() => {}}>
+            <button className="toolbar-btn" title={t('File Transfer')} onClick={() => invoke('open_file_transfer_window', { id })}>
               <FileText size={16} />
             </button>
             <button className="toolbar-btn" title={t('Settings')} onClick={() => {}}>

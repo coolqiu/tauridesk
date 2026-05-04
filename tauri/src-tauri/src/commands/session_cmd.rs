@@ -355,6 +355,15 @@ pub async fn set_browser_supported_codecs(vp8: bool, vp9: bool, h264: bool, av1:
         lc_guard.supported_encoding = se;
         drop(lc_guard);
 
+        // [New] Persist to global status so future sessions inherit these settings
+        let codec_json = serde_json::json!({
+            "vp8": vp8,
+            "vp9": vp9,
+            "h264": h264,
+            "av1": av1,
+        }).to_string();
+        hbb_common::config::Status::set("browser-supported-codecs", codec_json);
+
         println!("📡 [Tauri] Triggering codec re-negotiation for session {}", id);
 
         // Notify the peer about our updated capabilities (SupportedDecoding)

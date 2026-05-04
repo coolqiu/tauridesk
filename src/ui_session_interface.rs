@@ -1703,7 +1703,6 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn adapt_size(&self);
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
-    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
@@ -1726,7 +1725,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn handle_screenshot_resp(&self, sid: String, msg: String);
     fn handle_terminal_response(&self, response: TerminalResponse);
     /// Called when receiving an encoded video frame (before decoding), for WebCodecs integration
-    fn on_encoded_frame(&self, display: usize, format: CodecFormat, frame: EncodedVideoFrame) {}
+    fn on_encoded_frame(&self, _display: usize, _format: CodecFormat, _frame: EncodedVideoFrame) {}
     /// Return false to skip Rust software decoding when WebCodecs is used (saves CPU)
     fn needs_software_decoding(&self) -> bool { true }
 }

@@ -339,6 +339,10 @@ impl InvokeUiSession for SciterHandler {
         );
     }
 
+    fn clipboard(&self, content: String) {
+        self.call("onClipboard", &make_args!(content));
+    }
+
     fn cancel_msgbox(&self, tag: &str) {
         self.call("cancel_msgbox", &make_args!(tag));
     }

@@ -173,37 +173,123 @@ impl InvokeUiSession for TauriHandler {
 
     fn set_fingerprint(&self, _fingerprint: String) {}
 
-    fn job_error(&self, _id: i32, _err: String, _file_num: i32) {}
+    fn job_error(&self, id: i32, err: String, file_num: i32) {
+        #[derive(serde::Serialize, Clone)]
+        struct JobErrorPayload {
+            peer_id: String,
+            id: i32,
+            err: String,
+            file_num: i32,
+        }
+        self.emit("fs-job-error", JobErrorPayload {
+            peer_id: self.remote_id.clone(),
+            id,
+            err,
+            file_num,
+        });
+    }
 
-    fn job_done(&self, _id: i32, _file_num: i32) {}
+    fn job_done(&self, id: i32, file_num: i32) {
+        #[derive(serde::Serialize, Clone)]
+        struct JobDonePayload {
+            peer_id: String,
+            id: i32,
+            file_num: i32,
+        }
+        self.emit("fs-job-done", JobDonePayload {
+            peer_id: self.remote_id.clone(),
+            id,
+            file_num,
+        });
+    }
 
     fn clear_all_jobs(&self) {}
 
     fn new_message(&self, _msg: String) {}
 
-    fn update_transfer_list(&self) {}
+    fn update_transfer_list(&self) {
+        self.emit("fs-transfer-list-updated", self.remote_id.clone());
+    }
 
     fn load_last_job(&self, _cnt: i32, _job_json: &str, _auto_start: bool) {}
 
     fn update_folder_files(
         &self,
         _id: i32,
-        _entries: &Vec<FileEntry>,
-        _path: String,
+        entries: &Vec<FileEntry>,
+        path: String,
         _is_local: bool,
         _only_count: bool,
-    ) {}
+    ) {
+        #[derive(serde::Serialize, Clone)]
+        struct TauriFileEntry {
+            name: String,
+            is_dir: bool,
+            size: u64,
+            modified: u64,
+        }
+        #[derive(serde::Serialize, Clone)]
+        struct DirResultPayload {
+            id: String,
+            act_id: i32,
+            path: String,
+            entries: Vec<TauriFileEntry>,
+        }
+
+        let tauri_entries: Vec<TauriFileEntry> = entries.iter().map(|e| {
+            // FileType: Dir=0, DirLink=2, DirDrive=3 are all "directories"
+            let is_dir = e.entry_type.value() < 4;
+            TauriFileEntry {
+                name: e.name.clone(),
+                is_dir,
+                size: e.size,
+                modified: e.modified_time,
+            }
+        }).collect();
+
+        println!("📂 [Tauri Handler] Folder files updated: id={}, '{}' ({} entries) for peer {}", _id, path, tauri_entries.len(), self.remote_id);
+
+        let payload = DirResultPayload {
+            id: self.remote_id.clone(),
+            act_id: _id,
+            path: path.clone(),
+            entries: tauri_entries,
+        };
+        if _id > 0 {
+            self.emit("fs-folder-files", payload);
+        } else {
+            self.emit("fs-remote-dir", payload);
+        }
+    }
 
     fn confirm_delete_files(&self, _id: i32, _i: i32, _name: String) {}
 
     fn override_file_confirm(
         &self,
-        _id: i32,
-        _file_num: i32,
-        _to: String,
-        _is_upload: bool,
-        _is_identical: bool,
-    ) {}
+        id: i32,
+        file_num: i32,
+        to: String,
+        is_upload: bool,
+        is_identical: bool,
+    ) {
+        #[derive(serde::Serialize, Clone)]
+        struct OverridePayload {
+            peer_id: String,
+            id: i32,
+            file_num: i32,
+            to: String,
+            is_upload: bool,
+            is_identical: bool,
+        }
+        self.emit("fs-override-file-confirm", OverridePayload {
+            peer_id: self.remote_id.clone(),
+            id,
+            file_num,
+            to,
+            is_upload,
+            is_identical,
+        });
+    }
 
     fn update_block_input_state(&self, on: bool) {
         #[derive(serde::Serialize, Clone)]
@@ -211,7 +297,23 @@ impl InvokeUiSession for TauriHandler {
         self.emit("remote-option-changed", OptionPayload { key: "block-input".to_string(), value: on });
     }
 
-    fn job_progress(&self, _id: i32, _file_num: i32, _speed: f64, _finished_size: f64) {}
+    fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64) {
+        #[derive(serde::Serialize, Clone)]
+        struct JobProgressPayload {
+            peer_id: String,
+            id: i32,
+            file_num: i32,
+            speed: f64,
+            finished_size: f64,
+        }
+        self.emit("fs-job-progress", JobProgressPayload {
+            peer_id: self.remote_id.clone(),
+            id,
+            file_num,
+            speed,
+            finished_size,
+        });
+    }
 
     fn adapt_size(&self) {}
 

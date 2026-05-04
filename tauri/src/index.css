@@ -38,6 +38,7 @@ body { background: var(--rd-bg-scaffold); color: var(--rd-text-primary); height:
   border-bottom: 1px solid var(--rd-border);
   -webkit-app-region: drag;
   padding: 0 12px;
+  flex-shrink: 0;
 }
 
 .rd-titlebar-tabs {
@@ -153,8 +154,7 @@ body { background: var(--rd-bg-scaffold); color: var(--rd-text-primary); height:
   font-weight: 600;
 }
 
-/* 3. MAIN LAYOUT */
-.main-layout { display: flex; height: calc(100vh - var(--rd-titlebar-h)); width: 100vw; flex-direction: row !important; }
+/* 3. MAIN LAYOUT — handled via inline styles in App.tsx for resize correctness */
 
 .rd-local-panel {
   width: var(--rd-panel-w) !important;
@@ -192,13 +192,14 @@ body { background: var(--rd-bg-scaffold); color: var(--rd-text-primary); height:
 .gap-8 { gap: 32px !important; }
 .w-full { width: 100% !important; }
 .h-full { height: 100% !important; }
-.overflow-hidden { overflow: hidden !important; }
 .overflow-y-auto { overflow-y: auto !important; }
-.gap-8 { gap: 32px !important; }
-.w-full { width: 100% !important; }
-.h-full { height: 100% !important; }
-.overflow-hidden { overflow: hidden !important; }
-.overflow-y-auto { overflow-y: auto !important; }
+.h-screen { height: 100vh !important; }
+.w-screen { width: 100vw !important; }
+.items-center { align-items: center !important; }
+.justify-between { justify-content: space-between !important; }
+.justify-start { justify-content: flex-start !important; }
+.justify-end { justify-content: flex-end !important; }
+.justify-center { justify-content: center !important; }
 
 .rd-card {
   background-color: var(--rd-bg-card);
@@ -811,9 +812,9 @@ body { background: var(--rd-bg-scaffold); color: var(--rd-text-primary); height:
     font-family: 'Consolas', monospace;
     font-size: 11px;
     z-index: 2000;
-    pointer-events: none;
+    pointer-events: auto;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    min-width: 160px;
+    min-width: 180px;
 }
 
 .rd-perf-header {
@@ -826,7 +827,60 @@ body { background: var(--rd-bg-scaffold); color: var(--rd-text-primary); height:
     color: var(--rd-accent);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0;
+}
+
+.rd-perf-header span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.rd-perf-toggle {
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    color: #AAA;
+    line-height: 1;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.rd-perf-toggle:hover {
+    border-color: rgba(255,255,255,0.28);
+    color: #FFF;
+}
+
+.rd-quality-modes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.rd-quality-modes button {
+    height: 24px;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    color: #AAA;
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.rd-quality-modes button:hover {
+    border-color: rgba(255,255,255,0.28);
+    color: #EEE;
+}
+
+.rd-quality-modes button.active {
+    background: rgba(0, 113, 255, 0.22);
+    border-color: var(--rd-accent);
+    color: #FFF;
 }
 
 .rd-perf-row {

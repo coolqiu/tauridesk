@@ -47,7 +47,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
+        self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, Status,
         CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     fs::JobType,
@@ -1846,6 +1846,20 @@ impl LoginConfigHandler {
         }
         self.session_id = sid;
         self.supported_encoding = Default::default();
+        // Load persisted browser supported codecs
+        let codec_json = Status::get("browser-supported-codecs");
+        if !codec_json.is_empty() {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&codec_json) {
+                self.supported_encoding.vp8 = val["vp8"].as_bool().unwrap_or_default();
+                self.supported_encoding.h264 = val["h264"].as_bool().unwrap_or_default();
+                self.supported_encoding.av1 = val["av1"].as_bool().unwrap_or_default();
+                if let Some(vp9) = val["vp9"].as_bool() {
+                    let mut i444 = hbb_common::message_proto::CodecAbility::new();
+                    i444.vp9 = vp9;
+                    self.supported_encoding.i444 = hbb_common::protobuf::MessageField::some(i444);
+                }
+            }
+        }
         self.restarting_remote_device = false;
         self.force_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
