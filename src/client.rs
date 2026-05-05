@@ -3415,6 +3415,8 @@ pub async fn handle_hash(
 ) {
     lc.write().unwrap().hash = hash.clone();
     // Take care of password application order
+    let tauri_interactive_password = *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri"
+        && password_preset.is_empty();
 
     // switch_uuid
     let uuid = lc.write().unwrap().switch_uuid.take();
@@ -3452,18 +3454,18 @@ pub async fn handle_hash(
         }
     }
     // peer config password
-    if password.is_empty() {
+    if password.is_empty() && !tauri_interactive_password {
         password = lc.read().unwrap().config.password.clone();
         if !password.is_empty() {
             lc.write().unwrap().password_source = Default::default();
         }
     }
     // personal ab password
-    if password.is_empty() {
+    if password.is_empty() && !tauri_interactive_password {
         try_get_password_from_personal_ab(lc.clone(), &mut password);
     }
 
-    if password.is_empty() {
+    if password.is_empty() && !tauri_interactive_password {
         let p = crate::ui_interface::get_builtin_option(keys::OPTION_DEFAULT_CONNECT_PASSWORD);
         if !p.is_empty() {
             let mut hasher = Sha256::new();
@@ -3473,6 +3475,9 @@ pub async fn handle_hash(
             password = res[..].into();
             lc.write().unwrap().password_source = PasswordSource::SharedAb(p); // reuse SharedAb here
         }
+    }
+    if password.is_empty() && tauri_interactive_password {
+        println!("🔐 [Tauri Auth] No explicit password supplied; waiting for interactive password input.");
     }
 
     lc.write().unwrap().password = password.clone();
@@ -3491,7 +3496,9 @@ pub async fn handle_hash(
 
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        interface.msgbox("input-password", "Password Required", "", "");
+        if !tauri_interactive_password {
+            interface.msgbox("input-password", "Password Required", "", "");
+        }
         Vec::new()
     } else {
         let mut hasher = Sha256::new();

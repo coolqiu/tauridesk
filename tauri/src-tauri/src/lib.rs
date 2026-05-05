@@ -59,6 +59,11 @@ pub fn run() {
                 // If it's a self-connection (loopback) for testing, auto-authorize it quietly
                 // Check by ID or common loopback IPs
                 if (!ip.is_empty() && ip == my_id) || ip == "127.0.0.1" || ip == "localhost" || ip == "::1" {
+                    let approve_mode = librustdesk::ui_interface::get_option("approve-mode");
+                    if approve_mode == "password" {
+                        println!("🧪 [Tauri Bridge] SELF-LOOP detected in password mode. Skipping silent authorization.");
+                        return;
+                    }
                     println!("🧪 [Tauri Bridge] SELF-LOOP detected. Auto-authorizing in separate thread...");
                     std::thread::spawn(move || {
                         // Small delay to ensure core state is ready
@@ -185,7 +190,9 @@ pub fn run() {
             commands::session::connect_to_peer,
             commands::session::fs_connect,
             commands::session::get_session_conn_token,
+            commands::session::get_pending_msgbox,
             commands::session::submit_password,
+            commands::session::close_session,
             commands::session::is_session_connected,
             commands::session::listen_video_stream,
             commands::session::unlisten_video_stream,

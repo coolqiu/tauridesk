@@ -1,7 +1,9 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode } from 'react';
 
 interface SettingsLayoutProps {
   children: (activeTab: string) => ReactNode;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
 const SETTINGS_ICONS = {
@@ -47,9 +49,7 @@ const SETTINGS_ICONS = {
   ),
 };
 
-export default function SettingsLayout({ children }: SettingsLayoutProps) {
-  const [activeSettingsTab, setActiveSettingsTab] = useState('general');
-
+export default function SettingsLayout({ children, activeTab, onTabChange }: SettingsLayoutProps) {
   const navItems = [
     { id: 'general', label: '常规' },
     { id: 'security', label: '安全' },
@@ -76,8 +76,8 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
           {navItems.map((item) => (
             <button
                key={item.id}
-               onClick={() => setActiveSettingsTab(item.id)}
-               className={`rs-nav-item ${activeSettingsTab === item.id ? 'active' : ''}`}
+               onClick={() => onTabChange(item.id)}
+               className={`rs-nav-item ${activeTab === item.id ? 'active' : ''}`}
             >
                {SETTINGS_ICONS[item.id as keyof typeof SETTINGS_ICONS]}
                <span>{item.label}</span>
@@ -89,7 +89,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
       {/* 2. INDUSTRIAL CONTENT (SCROLLABLE) */}
       <main className="flex-1 bg-[var(--rd-bg-scaffold)] overflow-y-auto custom-scrollbar flex flex-col" style={{ height: 'calc(100vh - var(--rd-titlebar-h))' }}>
         <div className="flex flex-col w-full flex-shrink-0">
-           {children(activeSettingsTab)}
+           {children(activeTab)}
         </div>
       </main>
     </div>

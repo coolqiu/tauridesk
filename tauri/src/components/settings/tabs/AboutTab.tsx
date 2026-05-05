@@ -1,4 +1,23 @@
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+
+interface AppInfo {
+  name: string;
+  version: string;
+  os: string;
+  arch: string;
+  is_portable: boolean;
+}
+
 export default function AboutTab() {
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+
+  useEffect(() => {
+    invoke<AppInfo>('get_app_info')
+      .then(setAppInfo)
+      .catch(() => setAppInfo(null));
+  }, []);
+
   return (
     <div className="flex-col w-full h-full" style={{ padding: '12px 15px 40px 15px' }}>
       
@@ -14,8 +33,17 @@ export default function AboutTab() {
                   </svg>
               </div>
               <div className="flex-col">
-                  <div style={{ fontSize: '22px', fontWeight: 600, color: 'var(--rd-text-primary)', marginBottom: '4px' }}>RustDesk</div>
-                  <div style={{ fontSize: '13px', color: 'var(--rd-text-secondary)' }}>版本：1.2.3 (Tauri Built)</div>
+                  <div style={{ fontSize: '22px', fontWeight: 600, color: 'var(--rd-text-primary)', marginBottom: '4px' }}>
+                    {appInfo?.name || 'RustDesk'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--rd-text-secondary)' }}>
+                    版本：{appInfo?.version || '读取中...'} (Tauri Built)
+                  </div>
+                  {appInfo && (
+                    <div style={{ fontSize: '12px', color: 'var(--rd-text-secondary)', marginTop: '6px' }}>
+                      {appInfo.os} / {appInfo.arch}{appInfo.is_portable ? ' / Portable' : ''}
+                    </div>
+                  )}
                   <div style={{ fontSize: '12px', color: '#BBB', marginTop: '16px', lineHeight: 1.6 }}>
                       版权所有 © 2026 RustDesk 软件。<br />
                       采用 AGPL-3.0 许可协议。

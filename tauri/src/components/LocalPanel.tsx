@@ -3,7 +3,11 @@ import { Copy, RotateCcw, ShieldCheck, Settings, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServerStore } from '../store/serverStore';
 
-export default function LocalPanel() {
+interface LocalPanelProps {
+  onOpenSettings?: (tab: string) => void;
+}
+
+export default function LocalPanel({ onOpenSettings }: LocalPanelProps) {
   const { t } = useTranslation();
   const { id, password, refreshPassword } = useServerStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -40,9 +44,9 @@ export default function LocalPanel() {
                     </span>
                     <div className={`rd-dropdown ${isMenuOpen ? 'show' : ''}`} style={{ left: '0', top: '30px' }}>
                         <div className="rd-menu-item" onClick={() => copyToClipboard(id || '')}>{t('Copy ID')}</div>
-                        <div className="rd-menu-item">{t('Set Permanent Password')}</div>
+                        <div className="rd-menu-item" onClick={() => { setIsMenuOpen(false); onOpenSettings?.('security'); }}>{t('Set Permanent Password')}</div>
                         <div className="rd-menu-divider" />
-                        <div className="rd-menu-item">{t('Security Settings')}</div>
+                        <div className="rd-menu-item" onClick={() => { setIsMenuOpen(false); onOpenSettings?.('security'); }}>{t('Security Settings')}</div>
                     </div>
                 </div>
             </div>
@@ -67,8 +71,8 @@ export default function LocalPanel() {
       </div>
 
       <div className="flex-col" style={{ marginTop: 'auto', borderTop: '1px solid var(--rd-border)', paddingTop: '20px', gap: '12px' }}>
-        <div className="rd-action-link flex-row gap-2" title={t('Configure access password')}><Settings size={14} /> {t('Permanent Password')}</div>
-        <div className="rd-action-link flex-row gap-2" title={t('Enable two-factor authentication')}><ShieldCheck size={14} /> {t('Two-factor Auth')}</div>
+        <div className="rd-action-link flex-row gap-2" title={t('Configure access password')} onClick={() => onOpenSettings?.('security')}><Settings size={14} /> {t('Permanent Password')}</div>
+        <div className="rd-action-link flex-row gap-2" title={t('Enable two-factor authentication')} onClick={() => onOpenSettings?.('security')}><ShieldCheck size={14} /> {t('Two-factor Auth')}</div>
         <div className="rd-action-link flex-row gap-1" style={{ opacity: 0.6 }}><User size={14} /> {t('Not Logged In')}</div>
       </div>
 

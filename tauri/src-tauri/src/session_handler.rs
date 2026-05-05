@@ -7,7 +7,37 @@ use scrap::CodecFormat;
 use librustdesk::ui_session_interface::InvokeUiSession;
 use librustdesk::client::QualityStatus;
 use hbb_common::message_proto::{SwitchDisplay, TerminalResponse, ReadEmptyDirsResponse, WindowsSession, PeerInfo, DisplayInfo, FileEntry};
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
+
+#[derive(serde::Serialize, Clone)]
+pub struct MsgPayload {
+    id: String,
+    msgtype: String,
+    title: String,
+    text: String,
+}
+
+lazy_static! {
+    static ref PENDING_MSGBOXES: Arc<Mutex<HashMap<String, MsgPayload>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+fn is_password_msgbox(msgtype: &str, title: &str, text: &str) -> bool {
+    let needle = format!("{} {} {}", msgtype, title, text).to_lowercase();
+    needle.contains("password") || needle.contains("密码")
+}
+
+pub fn pending_msgbox(id: &str) -> Option<MsgPayload> {
+    PENDING_MSGBOXES.lock().ok()?.get(id.trim()).cloned()
+}
+
+pub fn clear_pending_msgbox(id: &str) {
+    if let Ok(mut pending) = PENDING_MSGBOXES.lock() {
+        pending.remove(id.trim());
+    }
+}
 
 // Represents a Tauri session, handles bridging `Session` trait events to Tauri Frontend
 #[derive(Clone, Default)]
@@ -376,21 +406,25 @@ impl InvokeUiSession for TauriHandler {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, _link: &str, _retry: bool) {
+        println!("[Session {}] MSGBOX: [{}] ({}) {}", self.remote_id, msgtype, title, text);
         log::debug!("[Session {}] MSGBOX: [{}] ({}) {}", self.remote_id, msgtype, title, text);
-        
-        #[derive(serde::Serialize, Clone)]
-        struct MsgPayload {
-            id: String,
-            msgtype: String,
-            title: String,
-            text: String,
-        }
-        self.emit("msgbox", MsgPayload {
+
+        let payload = MsgPayload {
             id: self.remote_id.clone(),
             msgtype: msgtype.to_string(),
             title: title.to_string(),
             text: text.to_string(),
-        });
+        };
+
+        if is_password_msgbox(msgtype, title, text) {
+            if let Ok(mut pending) = PENDING_MSGBOXES.lock() {
+                pending.insert(self.remote_id.clone(), payload.clone());
+            }
+        } else if msgtype == "success" {
+            clear_pending_msgbox(&self.remote_id);
+        }
+
+        self.emit("msgbox", payload);
     }
 
 

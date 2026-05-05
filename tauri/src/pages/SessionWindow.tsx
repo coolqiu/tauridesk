@@ -24,11 +24,39 @@ type BrowserCodecs = {
   h265: boolean;
   av1: boolean;
 };
+type MsgboxPayload = {
+  id: string;
+  msgtype: string;
+  title: string;
+  text: string;
+};
 
 const readQualityMode = (): QualityMode => {
   const saved = localStorage.getItem('rustdesk-quality-mode');
   return saved === 'smooth' || saved === 'balanced' || saved === 'quality' ? saved : 'balanced';
 };
+
+const mapViewStyleToMode = (value: string): 'contain' | 'cover' | 'original' => {
+  if (value === 'original') return 'original';
+  return 'contain';
+};
+
+const mapImageQualityToMode = (value: string): QualityMode => {
+  if (value === 'best') return 'quality';
+  if (value === 'low') return 'smooth';
+  return 'balanced';
+};
+
+const isPasswordPrompt = (payload: MsgboxPayload) => {
+  const haystack = `${payload.msgtype} ${payload.title} ${payload.text}`.toLowerCase();
+  return haystack.includes('password') || haystack.includes('密码');
+};
+
+const toPasswordRequest = (payload: MsgboxPayload) => ({
+  id: payload.id,
+  title: payload.title || 'Password Required',
+  text: payload.text || '',
+});
 
 export default function SessionWindow() {
   const { id } = useParams<{ id: string }>();
@@ -190,6 +218,23 @@ export default function SessionWindow() {
       .then(() => invoke('refresh_video', { id }))
       .catch(err => console.error('❌ Failed to renegotiate codec:', err));
   };
+
+  useEffect(() => {
+    let disposed = false;
+    invoke<string>('get_option', { key: 'view_style' })
+      .then(value => {
+        if (!disposed) setViewMode(mapViewStyleToMode(value));
+      })
+      .catch(() => {});
+    invoke<string>('get_option', { key: 'image_quality' })
+      .then(value => {
+        if (!disposed) setQualityMode(mapImageQualityToMode(value));
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     qualityModeRef.current = qualityMode;
@@ -583,12 +628,37 @@ export default function SessionWindow() {
       pendingDimensionsRef.current = { width: event.payload.width, height: event.payload.height };
     });
 
-    const unlistenMsgbox = listen<{ id: string, msgtype: string, title: string, text: string }>('msgbox', (event) => {
+    const unlistenMsgbox = listen<MsgboxPayload>('msgbox', (event) => {
       if (event.payload.id === id) {
-        if (event.payload.msgtype.includes('password')) setPasswordReq({ id: event.payload.id, title: event.payload.title, text: event.payload.text });
+        if (isPasswordPrompt(event.payload)) setPasswordReq(toPasswordRequest(event.payload));
         else if (event.payload.msgtype === "success") { setStatus('Connected successfully.'); setPasswordReq(null); }
       }
     });
+
+    let pendingMsgboxPoll: ReturnType<typeof setInterval> | null = null;
+    const probePendingMsgbox = () => {
+      if (!id) return;
+      invoke<MsgboxPayload | null>('get_pending_msgbox', { id })
+        .then(payload => {
+          if (payload && payload.id === id && isPasswordPrompt(payload)) {
+            setPasswordReq(toPasswordRequest(payload));
+          }
+        })
+        .catch(() => {});
+    };
+
+    if (id) {
+      let attempts = 0;
+      probePendingMsgbox();
+      pendingMsgboxPoll = setInterval(() => {
+        attempts += 1;
+        probePendingMsgbox();
+        if (attempts >= 10 && pendingMsgboxPoll) {
+          clearInterval(pendingMsgboxPoll);
+          pendingMsgboxPoll = null;
+        }
+      }, 300);
+    }
 
     const unlistenAuth = listen('connection-authorized', (event: any) => {
       if (event.payload.peer_id?.replace(/\s/g, '') === id?.replace(/\s/g, '')) setPasswordReq(null);
@@ -768,6 +838,7 @@ export default function SessionWindow() {
     return () => {
       clearInterval(statsTimer);
       if (pollInterval) clearInterval(pollInterval);
+      if (pendingMsgboxPoll) clearInterval(pendingMsgboxPoll);
       if (id) {
         invoke('unlisten_video_stream', { id }).catch(() => { });
         invoke('force_clear_video_channels', { id }).catch(() => { });

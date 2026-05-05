@@ -8,6 +8,23 @@ use librustdesk::client::Data;
 use scrap::CodecFormat;
 use hbb_common::log;
 
+fn close_existing_remote_session(id: &str) {
+    let id = id.trim().to_string();
+    let session = {
+        let mut sessions = ACTIVE_SESSIONS.lock().unwrap();
+        sessions.remove(&id)
+    };
+    if let Some(session) = session {
+        log::info!("[Tauri] Closing stale DEFAULT_CONN session for {}", id);
+        session.close();
+    }
+    SESSION_SENDERS.lock().unwrap().remove(&id);
+    crate::session_handler::clear_pending_msgbox(&id);
+    if let Ok(mut channels) = crate::VIDEO_CHANNELS.lock() {
+        channels.remove(&id);
+    }
+}
+
 fn tune_tauri_remote_codecs(session: &Session<TauriHandler>) {
     let mut lc = session.lc.write().unwrap();
     if !lc.mark_unsupported.contains(&CodecFormat::AV1) {
@@ -30,6 +47,7 @@ pub async fn connect_to_peer(app: AppHandle, id: String, password: Option<String
         let _ = window.set_focus();
         return Ok(());
     }
+    close_existing_remote_session(&id);
 
     // Move core initialization to a dedicated thread to avoid Tokio runtime conflict
     let app_clone = app.clone();
@@ -41,10 +59,18 @@ pub async fn connect_to_peer(app: AppHandle, id: String, password: Option<String
         let session_url = format!("/#/session/{}", id_clone);
 
         // UI Creation is usually OK on main/tokio, but let's keep it here or dispatch back
-        let _ = WebviewWindowBuilder::new(&app_clone, window_label, tauri::WebviewUrl::App(session_url.into()))
+        if let Ok(window) = WebviewWindowBuilder::new(&app_clone, window_label, tauri::WebviewUrl::App(session_url.into()))
             .title(format!("RustDesk - {}", id_clone))
             .inner_size(1024.0, 768.0)
-            .build();
+            .build()
+        {
+            let close_id = id_clone.clone();
+            window.on_window_event(move |event| {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    close_existing_remote_session(&close_id);
+                }
+            });
+        }
 
         let session: Session<TauriHandler> = Session {
             password: pwd_clone,
@@ -86,6 +112,12 @@ pub async fn connect_to_peer(app: AppHandle, id: String, password: Option<String
         SESSION_SENDERS.lock().unwrap().remove(&i_clone);
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_session(id: String) -> Result<(), String> {
+    close_existing_remote_session(&id);
     Ok(())
 }
 
@@ -165,6 +197,11 @@ pub async fn get_session_conn_token(id: String) -> Result<Option<String>, String
 }
 
 #[tauri::command]
+pub async fn get_pending_msgbox(id: String) -> Result<Option<crate::session_handler::MsgPayload>, String> {
+    Ok(crate::session_handler::pending_msgbox(&id))
+}
+
+#[tauri::command]
 pub async fn submit_password(id: String, password: String) -> Result<(), String> {
     let id = id.trim().to_string();
     log::debug!("[Tauri Auth] Submitting password for peer: '{}'", id);
@@ -228,6 +265,7 @@ pub async fn submit_password(id: String, password: String) -> Result<(), String>
     }
 
     if sent {
+        crate::session_handler::clear_pending_msgbox(&id);
         Ok(())
     } else {
         Err(format!("No active session found for peer '{}'", id))

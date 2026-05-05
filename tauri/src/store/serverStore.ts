@@ -16,11 +16,15 @@ export interface ServerState {
 interface ServerStore extends ServerState {
   password: string; // ALIAS FOR UI
   options: Record<string, string>;
+  localOptions: Record<string, string>;
   fetchServerState: () => Promise<void>;
   fetchOptions: (keys: string[]) => Promise<void>; // RESTORED MISSING METHOD
+  fetchLocalOptions: (keys: string[]) => Promise<void>;
   generateNewId: () => Promise<void>;
   refreshPassword: () => Promise<void>;
+  setPermanentPassword: (password: string) => Promise<void>;
   setOption: (name: string, value: string) => Promise<void>;
+  setLocalOption: (name: string, value: string) => Promise<void>;
 }
 
 // Safe invoke wrapper for browser testing
@@ -33,6 +37,7 @@ const safeInvoke = async <T>(command: string, args?: any): Promise<T> => {
     // Return empty mock values based on command
     if (command === 'get_server_state') return { id: '000 000 000', temporary_password: 'mock', is_service_running: true } as any;
     if (command === 'get_option') return '' as any;
+    if (command === 'get_local_option') return '' as any;
     return {} as any;
   } catch (e) {
     console.error(`Invoke error [${command}]:`, e);
@@ -50,6 +55,7 @@ export const useServerStore = create<ServerStore>((set, get) => ({
   connect_status: 0,
   is_service_running: true,
   options: {},
+  localOptions: {},
 
   fetchServerState: async () => {
     try {
@@ -78,6 +84,23 @@ export const useServerStore = create<ServerStore>((set, get) => ({
     }
   },
 
+  fetchLocalOptions: async (keys: string[]) => {
+    try {
+      const newOptions: Record<string, string> = { ...get().localOptions };
+      for (const key of keys) {
+        try {
+          const val = await safeInvoke<string>('get_local_option', { key });
+          newOptions[key] = val;
+        } catch (e) {
+          console.error(`Failed to fetch local option ${key}:`, e);
+        }
+      }
+      set({ localOptions: newOptions });
+    } catch (e) {
+      console.error('Failed to fetch local options batch:', e);
+    }
+  },
+
   generateNewId: async () => {
     await get().fetchServerState();
   },
@@ -91,6 +114,16 @@ export const useServerStore = create<ServerStore>((set, get) => ({
     }
   },
 
+  setPermanentPassword: async (password: string) => {
+    try {
+      await safeInvoke('set_permanent_password', { password });
+      await get().fetchServerState();
+    } catch (e) {
+      console.error('Failed to set permanent password:', e);
+      throw e;
+    }
+  },
+
   setOption: async (name: string, value: string) => {
     try {
       await safeInvoke('set_option', { key: name, value });
@@ -98,6 +131,16 @@ export const useServerStore = create<ServerStore>((set, get) => ({
       set({ options: newOptions });
     } catch (e) {
       console.error(`Failed to set option ${name}:`, e);
+    }
+  },
+
+  setLocalOption: async (name: string, value: string) => {
+    try {
+      await safeInvoke('set_local_option', { key: name, value });
+      const newOptions = { ...get().localOptions, [name]: value };
+      set({ localOptions: newOptions });
+    } catch (e) {
+      console.error(`Failed to set local option ${name}:`, e);
     }
   }
 }));

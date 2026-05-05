@@ -27,7 +27,11 @@ pub fn set_option(key: String, value: String) -> Result<(), String> {
     if key.is_empty() {
         return Err("Option key cannot be empty".to_string());
     }
+    let auth_mode_changed = key == "approve-mode" || key == "verification-method";
     librustdesk::ui_interface::set_option(key, value);
+    if auth_mode_changed {
+        librustdesk::server::clear_recent_auth_sessions();
+    }
     Ok(())
 }
 

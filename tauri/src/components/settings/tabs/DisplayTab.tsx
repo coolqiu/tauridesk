@@ -7,11 +7,11 @@ export default function DisplayTab() {
     setOption(name, value);
   };
 
-  const dSize = options['display-size'] || 'original';
-  const dScroll = options['display-scroll'] || 'auto';
-  const dQuality = options['display-quality'] || 'balance';
-  const dCodec = options['display-codec'] || 'auto';
-  const touchSpeed = options['touch-speed'] || '100';
+  const dSize = options['view_style'] || 'original';
+  const dScroll = options['scroll_style'] || 'scrollauto';
+  const dQuality = options['image_quality'] || 'balanced';
+  const dCodec = options['codec-preference'] || 'auto';
+  const touchSpeed = options['trackpad-speed'] || '100';
 
   return (
     <div className="flex-col w-full h-full" style={{ padding: '12px 15px 40px 15px' }}>
@@ -21,11 +21,11 @@ export default function DisplayTab() {
           <div className="card-title">默认显示方式</div>
           <div className="flex-col">
               <label className="rs-radio">
-                  <input type="radio" name="d-size" checked={dSize === 'original'} onChange={() => handleRadio('display-size', 'original')} /> 
+                  <input type="radio" name="d-size" checked={dSize === 'original'} onChange={() => handleRadio('view_style', 'original')} /> 
                   <div className="dot"></div> <span>原始尺寸</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="d-size" checked={dSize === 'fit'} onChange={() => handleRadio('display-size', 'fit')} /> 
+                  <input type="radio" name="d-size" checked={dSize === 'adaptive'} onChange={() => handleRadio('view_style', 'adaptive')} /> 
                   <div className="dot"></div> <span>适应窗口</span>
               </label>
           </div>
@@ -36,15 +36,15 @@ export default function DisplayTab() {
           <div className="card-title">默认滚动方式</div>
           <div className="flex-col">
               <label className="rs-radio">
-                  <input type="radio" name="d-scroll" checked={dScroll === 'auto'} onChange={() => handleRadio('display-scroll', 'auto')} /> 
+                  <input type="radio" name="d-scroll" checked={dScroll === 'scrollauto'} onChange={() => handleRadio('scroll_style', 'scrollauto')} /> 
                   <div className="dot"></div> <span>自动滚动</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="d-scroll" checked={dScroll === 'scrollbar'} onChange={() => handleRadio('display-scroll', 'scrollbar')} /> 
+                  <input type="radio" name="d-scroll" checked={dScroll === 'scrollbar'} onChange={() => handleRadio('scroll_style', 'scrollbar')} /> 
                   <div className="dot"></div> <span>滚动条</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="d-scroll" checked={dScroll === 'edge'} onChange={() => handleRadio('display-scroll', 'edge')} /> 
+                  <input type="radio" name="d-scroll" checked={dScroll === 'scrolledge'} onChange={() => handleRadio('scroll_style', 'scrolledge')} /> 
                   <div className="dot"></div> <span>边缘滚动</span>
               </label>
           </div>
@@ -55,15 +55,15 @@ export default function DisplayTab() {
           <div className="card-title">默认图像质量</div>
           <div className="flex-col">
               <label className="rs-radio">
-                  <input type="radio" name="d-quality" checked={dQuality === 'quality'} onChange={() => handleRadio('display-quality', 'quality')} /> 
+                  <input type="radio" name="d-quality" checked={dQuality === 'best'} onChange={() => handleRadio('image_quality', 'best')} /> 
                   <div className="dot"></div> <span>画质最优化</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="d-quality" checked={dQuality === 'balance'} onChange={() => handleRadio('display-quality', 'balance')} /> 
+                  <input type="radio" name="d-quality" checked={dQuality === 'balanced'} onChange={() => handleRadio('image_quality', 'balanced')} /> 
                   <div className="dot"></div> <span>平衡</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="d-quality" checked={dQuality === 'speed'} onChange={() => handleRadio('display-quality', 'speed')} /> 
+                  <input type="radio" name="d-quality" checked={dQuality === 'low'} onChange={() => handleRadio('image_quality', 'low')} /> 
                   <div className="dot"></div> <span>速度最优化</span>
               </label>
           </div>
@@ -74,15 +74,15 @@ export default function DisplayTab() {
           <div className="card-title">默认编解码</div>
           <div className="flex-col">
               <label className="rs-radio">
-                  <input type="radio" name="d-codec" checked={dCodec === 'auto'} onChange={() => handleRadio('display-codec', 'auto')} /> 
+                  <input type="radio" name="d-codec" checked={dCodec === 'auto'} onChange={() => handleRadio('codec-preference', 'auto')} /> 
                   <div className="dot"></div> <span>自动</span>
               </label>
               <div className="grid grid-cols-2" style={{ marginLeft: '30px', opacity: 0.8, marginTop: '5px' }}>
-                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'vp8'} onChange={() => handleRadio('display-codec', 'vp8')} /> <div className="dot"></div> <span>VP8</span></label>
-                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'vp9'} onChange={() => handleRadio('display-codec', 'vp9')} /> <div className="dot"></div> <span>VP9</span></label>
-                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'av1'} onChange={() => handleRadio('display-codec', 'av1')} /> <div className="dot"></div> <span>AV1</span></label>
-                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'h264'} onChange={() => handleRadio('display-codec', 'h264')} /> <div className="dot"></div> <span>H264</span></label>
-                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'h265'} onChange={() => handleRadio('display-codec', 'h265')} /> <div className="dot"></div> <span>H265</span></label>
+                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'vp8'} onChange={() => handleRadio('codec-preference', 'vp8')} /> <div className="dot"></div> <span>VP8</span></label>
+                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'vp9'} onChange={() => handleRadio('codec-preference', 'vp9')} /> <div className="dot"></div> <span>VP9</span></label>
+                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'av1'} onChange={() => handleRadio('codec-preference', 'av1')} /> <div className="dot"></div> <span>AV1</span></label>
+                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'h264'} onChange={() => handleRadio('codec-preference', 'h264')} /> <div className="dot"></div> <span>H264</span></label>
+                  <label className="rs-radio"><input type="radio" name="d-codec" checked={dCodec === 'h265'} onChange={() => handleRadio('codec-preference', 'h265')} /> <div className="dot"></div> <span>H265</span></label>
               </div>
           </div>
       </div>
@@ -95,7 +95,7 @@ export default function DisplayTab() {
                 type="range" 
                 style={{ flex: 1, accentColor: 'var(--rd-accent)', height: '4px', cursor: 'pointer' }} 
                 value={touchSpeed} 
-                onChange={(e) => setOption('touch-speed', e.target.value)} 
+                onChange={(e) => setOption('trackpad-speed', e.target.value)} 
               />
               <div style={{ background: '#F2F2F2', padding: '2px 10px', borderRadius: '4px', fontSize: '12px', minWidth: '40px', textAlign: 'center' }}>{touchSpeed}</div>
               <span style={{ fontSize: '12px', opacity: 0.5 }}>%</span>

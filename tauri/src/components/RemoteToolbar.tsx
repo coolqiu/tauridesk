@@ -40,8 +40,8 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
 
   // Load pinned state, collapsed state and position from storage on mount
   useEffect(() => {
-    invoke<boolean>('get_local_option', { key: 'toolbar-pinned' })
-      .then(saved => setIsPinned(saved))
+    invoke<string>('get_local_option', { key: 'toolbar-pinned' })
+      .then(saved => setIsPinned(saved === 'Y'))
       .catch(() => setIsPinned(false));
 
     const savedCollapsed = localStorage.getItem('rustdesk-toolbar-collapsed');
@@ -61,7 +61,7 @@ export default function RemoteToolbar({ id, onViewModeChange, viewMode, displays
 
   // Save pinned state when changed
   useEffect(() => {
-    invoke('set_local_option', { key: 'toolbar-pinned', value: isPinned })
+    invoke('set_local_option', { key: 'toolbar-pinned', value: isPinned ? 'Y' : 'N' })
       .catch(() => {});
   }, [isPinned]);
 

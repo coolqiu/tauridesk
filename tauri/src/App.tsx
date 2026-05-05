@@ -17,13 +17,58 @@ import AboutTab from './components/settings/tabs/AboutTab';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
-  const { fetchServerState, fetchOptions } = useServerStore();
+  const [activeSettingsTab, setActiveSettingsTab] = useState('general');
+  const { fetchServerState, fetchOptions, fetchLocalOptions } = useServerStore();
   const { fetchPeers } = usePeerStore();
 
   useEffect(() => {
     fetchServerState();
     fetchPeers();
-    fetchOptions(['theme', 'enable-hwcodec', 'codec-priority', 'enable-abr']);
+    fetchLocalOptions(['theme', 'lang', 'toolbar-pinned']);
+    fetchOptions([
+      'enable-hwcodec',
+      'enable-abr',
+      'allow-remove-wallpaper',
+      'enable-open-new-connections-in-tabs',
+      'use-texture-render',
+      'allow-d3d-render',
+      'enable-check-update',
+      'allow-auto-update',
+      'enable-directx-capture',
+      'enable-udp-punch',
+      'enable-ipv6-punch',
+      'keep-awake-during-outgoing-sessions',
+      'allow-ask-for-note',
+      'allow-auto-record-incoming',
+      'allow-auto-record-outgoing',
+      'view_style',
+      'scroll_style',
+      'image_quality',
+      'codec-preference',
+      'trackpad-speed',
+      'enable-keyboard',
+      'enable-tunnel',
+      'enable-remote-printer',
+      'enable-remote-restart',
+      'enable-clipboard',
+      'enable-record-session',
+      'enable-file-transfer',
+      'enable-block-input',
+      'enable-audio',
+      'allow-remote-config-modification',
+      'enable-camera',
+      'enable-terminal',
+      'verification-method',
+      'approve-mode',
+      'custom-rendezvous-server',
+      'relay-server',
+      'api-server',
+      'key',
+      'proxy-url',
+      'proxy-username',
+      'proxy-password',
+      'allow-websocket',
+    ]);
     
     // 每 8 秒轮询服务器状态（ID / 密码及连接状态）
     // get_server_state 已改为 async + spawn_blocking，不会造成堆栈溢出
@@ -32,7 +77,7 @@ export default function App() {
     }, 8000);
 
     return () => clearInterval(interval);
-  }, [fetchServerState, fetchPeers, fetchOptions]);
+  }, [fetchServerState, fetchPeers, fetchOptions, fetchLocalOptions]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--rd-bg-scaffold)' }}>
@@ -41,7 +86,7 @@ export default function App() {
       <main style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {activeTab === 'home' && (
           <div style={{ display: 'flex', flex: 1, width: '100%', minHeight: 0 }}>
-            <LocalPanel />
+            <LocalPanel onOpenSettings={(tab) => { setActiveSettingsTab(tab); setActiveTab('settings'); }} />
             <div className="workspace-area flex-1">
               <RemotePanel />
             </div>
@@ -51,7 +96,7 @@ export default function App() {
         {activeTab === 'address-book' && <AddressBook />}
         
         {activeTab === 'settings' && (
-          <SettingsLayout>
+          <SettingsLayout activeTab={activeSettingsTab} onTabChange={setActiveSettingsTab}>
              {(at) => {
                switch (at) {
                   case 'general': return <GeneralTab />;

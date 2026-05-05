@@ -51,18 +51,14 @@ const LANGUAGES = [
 ];
 
 export default function GeneralTab() {
-  const { options, setOption, id } = useServerStore();
+  const { options, localOptions, setOption, setLocalOption, id } = useServerStore();
 
   const handleCheckbox = (name: string, e: React.ChangeEvent<HTMLInputElement>) => {
     setOption(name, e.target.checked ? 'Y' : 'N');
   };
 
-  const handleRadio = (name: string, value: string) => {
-    setOption(name, value);
-  };
-
-  const currentTheme = options['theme'] || 'system';
-  const currentLang = options['language'] || 'zh-cn';
+  const currentTheme = localOptions['theme'] || 'system';
+  const currentLang = localOptions['lang'] || 'default';
 
   return (
     <div className="flex flex-col w-full" style={{ padding: '12px 15px 40px 15px' }}>
@@ -87,15 +83,15 @@ export default function GeneralTab() {
           <div className="card-title">主题</div>
           <div className="flex flex-col">
               <label className="rs-radio">
-                  <input type="radio" name="theme" checked={currentTheme === 'light'} onChange={() => handleRadio('theme', 'light')} /> 
+                  <input type="radio" name="theme" checked={currentTheme === 'light'} onChange={() => setLocalOption('theme', 'light')} /> 
                   <div className="dot"></div> <span>明亮</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="theme" checked={currentTheme === 'dark'} onChange={() => handleRadio('theme', 'dark')} /> 
+                  <input type="radio" name="theme" checked={currentTheme === 'dark'} onChange={() => setLocalOption('theme', 'dark')} /> 
                   <div className="dot"></div> <span>黑暗</span>
               </label>
               <label className="rs-radio">
-                  <input type="radio" name="theme" checked={currentTheme === 'system'} onChange={() => handleRadio('theme', 'system')} /> 
+                  <input type="radio" name="theme" checked={currentTheme === 'system'} onChange={() => setLocalOption('theme', 'system')} /> 
                   <div className="dot"></div> <span>跟随系统</span>
               </label>
           </div>
@@ -105,7 +101,7 @@ export default function GeneralTab() {
       <div className="rs-flat-card">
           <div className="card-title">语言</div>
           <div className="select-wrapper">
-              <select value={currentLang} onChange={(e) => setOption('language', e.target.value)}>
+              <select value={currentLang} onChange={(e) => setLocalOption('lang', e.target.value)}>
                   {LANGUAGES.map(lang => (
                       <option key={lang.value} value={lang.value}>{lang.label}</option>
                   ))}
@@ -136,11 +132,11 @@ export default function GeneralTab() {
       <div className="rs-flat-card">
           <div className="card-title">录屏</div>
           <label className="rs-checkbox">
-              <input type="checkbox" checked={options['auto-record-incoming'] === 'Y'} onChange={(e) => handleCheckbox('auto-record-incoming', e)} /> 
+              <input type="checkbox" checked={options['allow-auto-record-incoming'] === 'Y'} onChange={(e) => handleCheckbox('allow-auto-record-incoming', e)} /> 
               <div className="box"></div> <span>自动录制传入会话</span>
           </label>
           <label className="rs-checkbox">
-              <input type="checkbox" checked={options['auto-record-outgoing'] === 'Y'} onChange={(e) => handleCheckbox('auto-record-outgoing', e)} /> 
+              <input type="checkbox" checked={options['allow-auto-record-outgoing'] === 'Y'} onChange={(e) => handleCheckbox('allow-auto-record-outgoing', e)} /> 
               <div className="box"></div> <span>自动录制传出会话</span>
           </label>
           <div style={{ fontSize: '12px', color: '#555', marginTop: '8px' }}>被控：C:\ProgramData\RustDesk\recording</div>
@@ -154,7 +150,7 @@ export default function GeneralTab() {
           <div className="card-title">其他</div>
           <div className="flex flex-col">
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['confirm-close-tabs'] === 'Y'} onChange={(e) => handleCheckbox('confirm-close-tabs', e)} /> 
+                <input type="checkbox" checked={options['enable-confirm-closing-tabs'] === 'Y'} onChange={(e) => handleCheckbox('enable-confirm-closing-tabs', e)} /> 
                 <div className="box"></div> <span>关闭多个标签页时向您确认</span>
             </label>
             <label className="rs-checkbox">
@@ -162,11 +158,11 @@ export default function GeneralTab() {
                 <div className="box"></div> <span>自适应码率</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['remove-wallpaper'] === 'Y'} onChange={(e) => handleCheckbox('remove-wallpaper', e)} /> 
+                <input type="checkbox" checked={options['allow-remove-wallpaper'] === 'Y'} onChange={(e) => handleCheckbox('allow-remove-wallpaper', e)} /> 
                 <div className="box"></div> <span>接受会话时移除桌面壁纸</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['open-new-conn-tab'] === 'Y'} onChange={(e) => handleCheckbox('open-new-conn-tab', e)} /> 
+                <input type="checkbox" checked={options['enable-open-new-connections-in-tabs'] === 'Y'} onChange={(e) => handleCheckbox('enable-open-new-connections-in-tabs', e)} /> 
                 <div className="box"></div> <span>在选项卡中打开新连接</span>
             </label>
             <label className="rs-checkbox">
@@ -174,15 +170,15 @@ export default function GeneralTab() {
                 <div className="box"></div> <span>使用纹理渲染</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['use-d3d-render'] === 'Y'} onChange={(e) => handleCheckbox('use-d3d-render', e)} /> 
+                <input type="checkbox" checked={options['allow-d3d-render'] === 'Y'} onChange={(e) => handleCheckbox('allow-d3d-render', e)} /> 
                 <div className="box"></div> <span>使用 D3D 渲染</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['check-update'] === 'Y'} onChange={(e) => handleCheckbox('check-update', e)} /> 
+                <input type="checkbox" checked={options['enable-check-update'] === 'Y'} onChange={(e) => handleCheckbox('enable-check-update', e)} /> 
                 <div className="box"></div> <span>启动时检查软件更新</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['auto-update'] === 'Y'} onChange={(e) => handleCheckbox('auto-update', e)} /> 
+                <input type="checkbox" checked={options['allow-auto-update'] === 'Y'} onChange={(e) => handleCheckbox('allow-auto-update', e)} /> 
                 <div className="box"></div> <span>自动更新</span>
             </label>
             <label className="rs-checkbox">
@@ -190,19 +186,19 @@ export default function GeneralTab() {
                 <div className="box"></div> <span>使用 DirectX 捕获屏幕</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['enable-udp-hole-punching'] === 'Y'} onChange={(e) => handleCheckbox('enable-udp-hole-punching', e)} /> 
+                <input type="checkbox" checked={options['enable-udp-punch'] === 'Y'} onChange={(e) => handleCheckbox('enable-udp-punch', e)} /> 
                 <div className="box"></div> <span>启用 UDP 打洞</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['enable-ipv6-p2p'] === 'Y'} onChange={(e) => handleCheckbox('enable-ipv6-p2p', e)} /> 
+                <input type="checkbox" checked={options['enable-ipv6-punch'] === 'Y'} onChange={(e) => handleCheckbox('enable-ipv6-punch', e)} /> 
                 <div className="box"></div> <span>启用 IPv6 P2P 连接</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['keep-screen-on'] === 'Y'} onChange={(e) => handleCheckbox('keep-screen-on', e)} /> 
+                <input type="checkbox" checked={options['keep-awake-during-outgoing-sessions'] === 'Y'} onChange={(e) => handleCheckbox('keep-awake-during-outgoing-sessions', e)} /> 
                 <div className="box"></div> <span>传出会话期间保持屏幕常亮</span>
             </label>
             <label className="rs-checkbox">
-                <input type="checkbox" checked={options['request-note-on-end'] === 'Y'} onChange={(e) => handleCheckbox('request-note-on-end', e)} /> 
+                <input type="checkbox" checked={options['allow-ask-for-note'] === 'Y'} onChange={(e) => handleCheckbox('allow-ask-for-note', e)} /> 
                 <div className="box"></div> <span>在连接结束时请求备注</span>
             </label>
           </div>

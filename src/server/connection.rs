@@ -90,6 +90,13 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     x == 0
 }
 
+pub fn clear_recent_auth_sessions() {
+    if let Ok(mut sessions) = SESSIONS.lock() {
+        sessions.clear();
+        log::info!("clear recent auth sessions");
+    }
+}
+
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 lazy_static::lazy_static! {
     static ref WALLPAPER_REMOVER: Arc<Mutex<Option<WallPaperRemover>>> = Default::default();
@@ -2207,7 +2214,9 @@ impl Connection {
     fn try_start_cm_ipc(&mut self) {
         if let Some(p) = self.start_cm_ipc_para.take() {
             // [Phase 25] Tauri Native Authorizer Integration
-            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri"
+                && password::approve_mode() != ApproveMode::Password
+            {
                 let id = self.inner.id();
                 let peer_id = self.lr.my_id.clone();
                 let peer_name = self.lr.my_name.clone();
@@ -2267,26 +2276,15 @@ impl Connection {
             let my_id = hbb_common::config::Config::get_id();
             println!("🔍 [Auth Check] Client ID: '{}', Server ID: '{}', APP_NAME: '{}'", lr.my_id, my_id, *hbb_common::config::APP_NAME.read().unwrap());
 
-            // [Phase 26] Immediate Tauri Auth Popup Trigger
-            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
-                let id = self.inner.id();
-                let peer_id = lr.my_id.clone();
-                let _peer_name = lr.my_name.clone();
-                println!("📢 [Tauri Auth] Triggering popup for {} (id: {})", peer_id, id);
-                
-                // We need to register the sender here because handle_login_request_without_validation
-                // might call try_start_cm_ipc which clears the para.
-                // However, we'll let try_start_cm_ipc handle the map registration for consistency.
-            }
-
             self.handle_login_request_without_validation(&lr).await;
-            
-            // [Phase 26] If not authorized yet, trigger the password prompt on the client
-            if !self.authorized && *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
-                if lr.password.is_empty() {
-                    println!("🔑 [Tauri Auth] Sending error to trigger password prompt on client");
-                    self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG).await;
-                }
+            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                println!(
+                    "🔐 [Tauri Auth] approve-mode='{}', verification-method='{}', has_valid_password={}, lr.password_empty={}",
+                    Config::get_option("approve-mode"),
+                    Config::get_option("verification-method"),
+                    password::has_valid_password(),
+                    lr.password.is_empty()
+                );
             }
             if self.authorized {
                 // [Phase 26] If authorized (possibly via password), notify Tauri to close any pending popup
@@ -2427,9 +2425,12 @@ impl Connection {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             let is_logon = || crate::platform::is_prelogin();
 
-            let allow_logon_screen_password =
+            let mut allow_logon_screen_password =
                 crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
                     && is_logon();
+            if *hbb_common::config::APP_NAME.read().unwrap() == "RustDesk_Tauri" {
+                allow_logon_screen_password = false;
+            }
 
             if !hbb_common::is_ip_str(&lr.username)
                 && !hbb_common::is_domain_port_str(&lr.username)
@@ -2438,10 +2439,9 @@ impl Connection {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
                 return false;
-            } else if ((password::approve_mode() == ApproveMode::Click
+            } else if (password::approve_mode() == ApproveMode::Click
                 && !allow_logon_screen_password)
-                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password())
-                && *hbb_common::config::APP_NAME.read().unwrap() != "RustDesk_Tauri"
+                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
                 if hbb_common::get_version_number(&lr.version)

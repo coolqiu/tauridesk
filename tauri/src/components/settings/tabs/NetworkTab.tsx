@@ -1,27 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useServerStore } from '../../../store/serverStore';
 
 export default function NetworkTab() {
   const { options, setOption } = useServerStore();
   const [activeModal, setActiveModal] = useState<null | 'id-relay' | 'proxy'>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLocked, setIsLocked] = useState(true);
 
   // Form states
-  const [idServer, setIdServer] = useState(options['id-server'] || '');
+  const [idServer, setIdServer] = useState(options['custom-rendezvous-server'] || '');
   const [relayServer, setRelayServer] = useState(options['relay-server'] || '');
   const [apiServer, setApiServer] = useState(options['api-server'] || '');
   const [key, setKey] = useState(options['key'] || '');
 
-  const [proxyServer, setProxyServer] = useState(options['proxy-server'] || '');
-  const [proxyUser, setProxyUser] = useState(options['proxy-user'] || '');
-  const [proxyPwd, setProxyPwd] = useState(options['proxy-pwd'] || '');
+  const [proxyServer, setProxyServer] = useState(options['proxy-url'] || '');
+  const [proxyUser, setProxyUser] = useState(options['proxy-username'] || '');
+  const [proxyPwd, setProxyPwd] = useState(options['proxy-password'] || '');
+
+  useEffect(() => {
+    setIdServer(options['custom-rendezvous-server'] || '');
+    setRelayServer(options['relay-server'] || '');
+    setApiServer(options['api-server'] || '');
+    setKey(options['key'] || '');
+    setProxyServer(options['proxy-url'] || '');
+    setProxyUser(options['proxy-username'] || '');
+    setProxyPwd(options['proxy-password'] || '');
+  }, [options]);
 
   const handleToggle = (name: string, current: string) => {
+    if (isLocked) return;
     setOption(name, current === 'Y' ? 'N' : 'Y');
   };
 
   const handleSaveIdRelay = () => {
-    setOption('id-server', idServer);
+    if (isLocked) return;
+    setOption('custom-rendezvous-server', idServer);
     setOption('relay-server', relayServer);
     setOption('api-server', apiServer);
     setOption('key', key);
@@ -29,20 +42,30 @@ export default function NetworkTab() {
   };
 
   const handleSaveProxy = () => {
-    setOption('proxy-server', proxyServer);
-    setOption('proxy-user', proxyUser);
-    setOption('proxy-pwd', proxyPwd);
+    if (isLocked) return;
+    setOption('proxy-url', proxyServer);
+    setOption('proxy-username', proxyUser);
+    setOption('proxy-password', proxyPwd);
     setActiveModal(null);
   };
 
-  const useWs = options['use-ws'] === 'Y';
+  const useWs = options['allow-websocket'] === 'Y';
 
   return (
     <div className="flex-col w-full h-full" style={{ padding: '12px 15px 40px 15px' }}>
       
       <div style={{ maxWidth: '540px', width: '100%', margin: '0 auto' }}>
-          <button className="rs-btn-blue w-full mb-5" style={{ background: '#fff', color: 'var(--rd-accent)', border: '1px solid var(--rd-accent)', boxShadow: 'none' }}>
-            🛡️ 解锁网络设置
+          <button
+            className="rs-btn-blue w-full mb-5"
+            onClick={() => setIsLocked(!isLocked)}
+            style={{
+              background: isLocked ? '#fff' : 'var(--rd-accent)',
+              color: isLocked ? 'var(--rd-accent)' : '#fff',
+              border: isLocked ? '1px solid var(--rd-accent)' : 'none',
+              boxShadow: isLocked ? 'none' : '0 1px 3px rgba(0,113,255,0.2)'
+            }}
+          >
+            {isLocked ? '🛡️ 解锁网络设置' : '🔓 锁定网络设置'}
           </button>
 
           {/* 1. 网络配置 */}
@@ -52,9 +75,9 @@ export default function NetworkTab() {
               <div className="flex-col">
                   {/* ID/中继服务器 */}
                   <div 
-                    onClick={() => setActiveModal('id-relay')}
+                    onClick={() => !isLocked && setActiveModal('id-relay')}
                     className="rs-list-item-hover flex-row"
-                    style={{ padding: '16px 20px', borderBottom: '1px solid var(--rd-border)', cursor: 'pointer' }}
+                    style={{ padding: '16px 20px', borderBottom: '1px solid var(--rd-border)', cursor: isLocked ? 'not-allowed' : 'pointer', opacity: isLocked ? 0.55 : 1 }}
                   >
                       <div className="m-blue" style={{ width: '24px', marginRight: '16px', display: 'flex', justifyContent: 'center' }}>
                           <svg className="rs-icon-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="5" width="20" height="6" rx="1"/><rect x="2" y="13" width="20" height="6" rx="1"/><circle cx="5" cy="8" r="1"/><circle cx="5" cy="16" r="1"/></svg>
@@ -65,9 +88,9 @@ export default function NetworkTab() {
 
                   {/* 代理设置 */}
                   <div 
-                    onClick={() => setActiveModal('proxy')}
+                    onClick={() => !isLocked && setActiveModal('proxy')}
                     className="rs-list-item-hover flex-row"
-                    style={{ padding: '16px 20px', borderBottom: '1px solid var(--rd-border)', cursor: 'pointer' }}
+                    style={{ padding: '16px 20px', borderBottom: '1px solid var(--rd-border)', cursor: isLocked ? 'not-allowed' : 'pointer', opacity: isLocked ? 0.55 : 1 }}
                   >
                       <div className="m-blue" style={{ width: '24px', marginRight: '16px', display: 'flex', justifyContent: 'center' }}>
                           <svg className="rs-icon-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7h-9m0 0l3-3m-3 3l3 3M4 17h9m0 0l-3-3m3 3l-3 3"/></svg>
@@ -86,7 +109,8 @@ export default function NetworkTab() {
                           <input 
                             type="checkbox" 
                             checked={useWs} 
-                            onChange={() => handleToggle('use-ws', options['use-ws'] || 'N')}
+                            disabled={isLocked}
+                            onChange={() => handleToggle('allow-websocket', options['allow-websocket'] || 'N')}
                           />
                           <div className="slider"></div>
                       </label>
